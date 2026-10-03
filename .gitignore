@@ -1,0 +1,55 @@
+# --- Claude Code local settings ---
+.claude/
+
+# --- Python / Backend ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# --- Node / Frontend ---
+node_modules/
+dist/
+build/
+.vite/
+.ts-build/
+*.tsbuildinfo
+coverage/
+*.local
+
+# --- Env / secrets ---
+.env
+.env.*
+!.env.example
+
+# --- Docker ---
+*.pid
+
+# --- Storage (local document store, DB volumes) ---
+storage/documents/*
+!storage/documents/.gitkeep
+pgdata/
+redisdata/
+miniodata/
+
+# --- IDE / OS ---
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Alembic ---
+backend/alembic/versions/__pycache__/
