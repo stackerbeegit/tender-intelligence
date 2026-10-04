@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     celery_result_backend: str = "redis://localhost:6379/2"
 
     # --- Object storage ---
+    # "minio" | "s3" (both via the S3 backend, just different endpoint/creds)
+    # "local" (plain filesystem — for dev environments without a running
+    # MinIO/S3, e.g. this project's native-Postgres local setup)
     storage_provider: str = "minio"
     s3_endpoint_url: str = "http://localhost:9000"
     s3_access_key: str = ""
@@ -46,6 +49,20 @@ class Settings(BaseSettings):
     s3_bucket_name: str = "tender-documents"
     s3_region: str = "ap-south-1"
     s3_use_ssl: bool = False
+    local_storage_path: str = "storage/documents"
+
+    # --- Document processing (Sprint 3+) ---
+    max_document_size_bytes: int = 50 * 1024 * 1024  # 50 MB
+    allowed_document_mime_types: tuple[str, ...] = (
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-excel",
+        "application/zip",  # some portals serve tender bundles as .zip
+    )
+    ocr_min_chars_per_page: int = 20  # below this, a PDF page is treated as scanned
+    document_download_timeout_seconds: float = 60.0
 
     # --- LLM abstraction (Sprint 4+) ---
     llm_provider: str = "anthropic"
@@ -53,6 +70,23 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-sonnet-5"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
+
+    # --- Crawler / connector behaviour (Sprint 2+) ---
+    crawler_default_rate_limit_seconds: float = 2.0
+    crawler_default_retry_attempts: int = 3
+    crawler_user_agent: str = "StackerbeeTenderBot/1.0 (+https://stackerbee.com/bot)"
+
+    # --- GeM connector ---
+    # bidplus.gem.gov.in/all-bids is GeM's own public bid-listing page; this
+    # is the same JSON endpoint its frontend calls to render that page for
+    # any anonymous visitor (no login, no CAPTCHA). `terms_access_notes` on
+    # the `sources` row documents the access-policy review. discover()
+    # searches per Stackerbee focus-area keyword rather than taking the
+    # unfiltered "all ongoing bids" feed — `gem_pages_per_keyword` bounds
+    # each keyword's share of the crawl to a polite request volume.
+    gem_bidplus_base_url: str = "https://bidplus.gem.gov.in"
+    gem_pages_per_keyword: int = 2
+    gem_request_timeout_seconds: float = 30.0
 
     # --- Notifications (Sprint 6+) ---
     notifications_email_enabled: bool = True

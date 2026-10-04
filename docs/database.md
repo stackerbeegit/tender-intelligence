@@ -24,23 +24,25 @@ Conventions used throughout:
 | `audit_logs` | ✅ Sprint 1 | `id`, `user_id` FK→users (nullable), `action`, `entity_type`, `entity_id`, `metadata` (jsonb), `ip_address`, `created_at` | Append-only; written for auth events and mutating admin actions |
 | `notifications` | 🔜 Sprint 6 | `id`, `user_id` FK, `channel`, `type`, `payload` (jsonb), `read_at`, `sent_at` | Channel abstraction: email first |
 
-## 2. Source management (Sprint 2)
+## 2. Source management ✅ Sprint 2
 
 | Table | Key columns | Notes |
 |---|---|---|
-| `sources` | `id`, `name`, `organisation`, `url`, `source_type` (`gem`\|`cppp`\|`state`\|`psu`\|`department`\|`other`), `country`, `state`, `auth_required` (bool), `api_available` (bool), `crawler_enabled` (bool), `frequency` (cron-like), `last_successful_crawl_at`, `last_failure_at`, `status` (`healthy`\|`degraded`\|`down`\|`disabled`), `terms_access_notes` (text) | `terms_access_notes` must be filled in **before** `crawler_enabled` may be set true (enforced in service layer, not just convention) |
-| `crawler_runs` | `id`, `source_id` FK, `started_at`, `finished_at`, `status` (`success`\|`partial`\|`failed`), `tenders_discovered`, `tenders_new`, `tenders_updated`, `error_summary` (text) | Powers the admin "Source Health" view |
+| `sources` | `id`, `name`, `organisation`, `url`, `source_type` (`gem`\|`cppp`\|`state`\|`psu`\|`department`\|`manual`\|`other`), `country`, `state`, `auth_required` (bool), `api_available` (bool), `crawler_enabled` (bool), `frequency` (cron-like), `last_successful_crawl_at`, `last_failure_at`, `status` (`healthy`\|`degraded`\|`down`\|`disabled`), `terms_access_notes` (text) | `terms_access_notes` must be filled in **before** `crawler_enabled` may be set true — enforced in `app/services/source_service.py`. `source_type=manual` is seeded out of the box (migration 0002) for the Rule 12 fallback; it never has a crawler. |
+| `crawler_runs` | `id`, `source_id` FK, `started_at`, `finished_at`, `status` (`running`\|`success`\|`partial`\|`failed`), `tenders_discovered`, `tenders_new`, `tenders_updated`, `error_summary` (text) | Written by `app/connectors/base/runner.py::CrawlerRunner`; powers the admin "Source Health" view |
 
-## 3. Tenders (Sprint 2)
+## 3. Tenders ✅ Sprint 2
 
 | Table | Key columns | Notes |
 |---|---|---|
-| `tenders` | `id`, `source_id` FK, `source_tender_id` (the portal's own ref no.), `fingerprint_hash` (unique, computed from normalised title+org+value+dates), `tender_number`, `title`, `organisation_id` FK→tender_organisations, `url`, `published_date`, `closing_date`, `tender_value`, `emd_amount`, `tender_fee`, `status` (`open`\|`closed`\|`cancelled`\|`corrigendum`), `raw_metadata` (jsonb) | `fingerprint_hash` + `source_tender_id` drive deduplication across sources and re-publications |
-| `tender_organisations` | `id`, `name`, `type` (`central_govt`\|`state_govt`\|`psu`\|`other`), `state`, `city` | Normalises buyer identity for organisation-wise analytics later |
+| `tenders` | `id`, `source_id` FK, `source_tender_id` (the portal's own ref no.), `fingerprint_hash` (unique, computed from normalised title+org+value+**published_date only**), `tender_number`, `title`, `organisation_id` FK→tender_organisations, `url`, `published_date`, `closing_date`, `tender_value`, `emd_amount`, `tender_fee`, `status` (`open`\|`closed`\|`cancelled`\|`corrigendum`), `raw_metadata` (**jsonb**) | `(source_id, source_tender_id)` is checked first, `fingerprint_hash` is the cross-source fallback — see `app/services/tender_ingestion_service.py`. Deliberately excludes `closing_date` from the fingerprint since that's the one field corrigenda change; see `tender_deadlines` below. |
+| `tender_organisations` | `id`, `name`, `normalized_name` (unique, lowercased — the get-or-create key), `type` (`central_govt`\|`state_govt`\|`psu`\|`private`\|`other`), `state`, `city` | Normalises buyer identity for organisation-wise analytics later |
 | `tender_locations` | `id`, `tender_id` FK, `state`, `city`, `pincode` | A tender may span multiple delivery locations |
-| `tender_categories` | `id`, `tender_id` FK, `category` (enum: the 10 focus areas + other), `confidence` | AI-assigned; `confidence` keeps this honestly an interpretation, not a fact |
-| `tender_deadlines` | `id`, `tender_id` FK, `deadline_type` (`bid_submission`\|`pre_bid_meeting`\|`clarification`\|`extended`), `deadline_at`, `source_document_id` FK nullable | Supports corrigenda that move deadlines without losing history |
-| `tender_documents` | `id`, `tender_id` FK, `file_name`, `document_type` (`nit`\|`rfp`\|`boq`\|`annexure`\|`corrigendum`\|`other`), `storage_path`, `checksum_sha256`, `file_size_bytes`, `ocr_status` (`not_required`\|`pending`\|`done`\|`failed`), `extraction_status` (`pending`\|`done`\|`failed`), `page_count` | `storage_path` points into S3/MinIO, never served unauthenticated |
+| `tender_categories` | `id`, `tender_id` FK, `category` (enum: the 9 focus areas + other), `confidence` | `confidence` is null for directly-set categories (manual entry today); only the Sprint 4 intelligence engine populates it, keeping fact vs. interpretation visible on the row itself |
+| `tender_deadlines` | `id`, `tender_id` FK, `deadline_type` (`bid_submission`\|`pre_bid_meeting`\|`clarification`\|`extended`), `deadline_at`, `source_document_id` FK nullable | A corrigendum **adds** an `extended` row and updates `tenders.closing_date` + sets `tenders.status=corrigendum` — the original row is never overwritten, so the full history survives (tested: `test_changed_closing_date_adds_extended_deadline_and_marks_corrigendum`) |
+| `tender_documents` | `id`, `tender_id` FK, `file_name`, `document_type` (`nit`\|`rfp`\|`boq`\|`annexure`\|`corrigendum`\|`other`), `source_url`, `storage_path`, `checksum_sha256`, `file_size_bytes`, `ocr_status` (`not_required`\|`pending`\|`done`\|`failed`), `extraction_status` (`pending`\|`done`\|`failed`), `page_count`, `extracted_text` ✅ Sprint 3, `last_processing_error` ✅ Sprint 3 | `source_url` is populated at ingestion time (connector or manual entry), or `storage_path` directly for a manual file upload. `extracted_text`/`last_processing_error` added in migration `0004`; populated by `app/services/document_processing_service.py`. |
+
+**A note on `json` vs `jsonb`:** every JSON column (`roles.permissions`, `audit_logs.details`, `tenders.raw_metadata`) uses `jsonb`, not plain `json` — enforced via `app/models/base.py::sa_json()`. Plain Postgres `json` has no equality operator, which silently breaks any query needing `SELECT DISTINCT` on a row containing that column (exactly what tender keyword search does). This was caught only when testing against a real Postgres database, not the SQLite-backed unit test suite — see `tests/integration/test_postgres_tender_search.py` for the regression test, and migration `0003_json_to_jsonb` for the fix applied to already-migrated databases.
 
 ## 4. Document intelligence — facts (Sprint 3–4)
 
@@ -98,5 +100,16 @@ users 1──* audit_logs
 ## 9. Migrations
 
 Alembic manages all schema changes (`backend/alembic/`). Each sprint's new tables ship as
-their own migration — never hand-edited directly in a shared environment. Sprint 1 ships
-migration `0001_initial_roles_and_users` only.
+their own migration — never hand-edited directly in a shared environment. So far:
+
+- `0001_initial_roles_and_users` (Sprint 1) — `roles`, `users`, `audit_logs`
+- `0002_sources_and_tenders` (Sprint 2) — `sources`, `crawler_runs`, `tender_organisations`,
+  `tenders`, `tender_documents`, `tender_deadlines`, `tender_locations`, `tender_categories`;
+  seeds the `manual` source
+- `0003_json_to_jsonb` (Sprint 2 bugfix) — converts `roles.permissions`, `audit_logs.details`,
+  `tenders.raw_metadata` from `json` to `jsonb` (plain `json` has no equality operator, which
+  broke `SELECT DISTINCT` on tender search under real Postgres — not caught by the SQLite test
+  suite). `0001`/`0002` now create these columns as `jsonb` directly for fresh installs; `0003`
+  repairs databases that already ran the original versions, and is a safe no-op if run twice.
+- `0004_document_extraction_fields` (Sprint 3) — adds `tender_documents.extracted_text` and
+  `tender_documents.last_processing_error`.

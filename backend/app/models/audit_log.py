@@ -1,10 +1,10 @@
 import uuid
 
-from sqlalchemy import JSON, ForeignKey, String
+from sqlalchemy import ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin, sa_json
 
 
 class AuditLog(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -20,7 +20,7 @@ class AuditLog(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     action: Mapped[str] = mapped_column(String(100), nullable=False)
     entity_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     entity_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    details: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    details: Mapped[dict] = mapped_column(sa_json(), default=dict, nullable=False)
     ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     def __repr__(self) -> str:  # pragma: no cover

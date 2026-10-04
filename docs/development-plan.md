@@ -24,7 +24,7 @@ skeleton, PostgreSQL + Redis, authentication foundation, basic database (`users`
 **Explicitly not in scope:** any real source connector, document processing, LLM calls,
 matching, or opportunity CRM. Those packages exist as empty, documented placeholders.
 
-## Sprint 2 — Source registry & tender ingestion
+## Sprint 2 — Source registry & tender ingestion ✅
 
 **Scope:** `sources` + `crawler_runs` tables; connector base interface
 (`discover/fetch_tender/fetch_documents/parse/normalise`) with retry/rate-limit/logging
@@ -41,7 +41,47 @@ provided URL instead (Rule 11/12 of the brief). No CAPTCHA/auth bypass, ever.
 permit automated access (or a manual-upload fallback if none qualify yet), with
 duplicate-tender and changed-deadline test cases passing.
 
-## Sprint 3 — Document management
+**What shipped:**
+- `app/connectors/base/{types,base_connector,runner}.py` — the connector interface and
+  `CrawlerRunner` (per-item retry via `tenacity`, inter-item rate limiting, failure
+  isolation so one bad tender doesn't abort a run, and `crawler_runs`/`Source` health
+  rollup).
+- `app/connectors/gem/{connector,parser}.py` — a real connector against GeM's public
+  "All Bids" listing. **Access-policy review** (Rule 11), done before any code was
+  written: `robots.txt` on `bidplus.gem.gov.in` does not disallow `/all-bids` or
+  `/all-bids-data`; no login or CAPTCHA gates either (same JSON endpoint GeM's own
+  frontend calls for any anonymous visitor). GeM's Terms of Use require advance written
+  permission to reproduce site content — Stackerbee confirmed that permission is in
+  place for this integration (2026-10-04; recorded on the live `sources.terms_access_notes`
+  row). The connector calls that exact endpoint, not a scrape of rendered HTML, with a
+  descriptive User-Agent and a capped page count per run
+  (`settings.gem_max_pages_per_crawl`, default 3 × 10 bids). First live run: 30
+  discovered, 29 new, 1 deduplicated — see the progress log below.
+  CPPP/eProcure has the same "permission required to reproduce" clause in its Copyright
+  Policy; no connector has been built for it yet — that's a separate access-policy
+  conversation to have before writing one, not an engineering gap.
+- The exit criterion's manual-upload fallback remains available for any source without
+  a connector yet:
+  `app/services/manual_tender_service.py` + `POST /api/v1/tenders/manual`, backed by a
+  seeded `source_type=manual` row. Builds the same `NormalisedTender` a connector would,
+  so manual and (eventually) crawled tenders are indistinguishable once ingested.
+- `app/services/tender_ingestion_service.py` — dedup by `(source_id, source_tender_id)`
+  first, `fingerprint_hash` (title+org+value+published_date) as a cross-source fallback;
+  deadline changes append an `extended` `tender_deadlines` row and mark the tender
+  `corrigendum` rather than overwriting history.
+- `GET/POST /api/v1/sources`, `PATCH /api/v1/sources/{id}` (admin-gated;
+  `crawler_enabled=true` rejected unless `terms_access_notes` is set — Rule 11 enforced
+  in code, not just policy); `GET /api/v1/tenders` (keyword/category/status/value/
+  state/city filters + pagination), `GET /api/v1/tenders/{id}`.
+- Frontend: Tenders list with filters, tender detail (deadline history, documents,
+  fact-labelled categories), "Add Tender Manually" form, Sources admin page
+  (admin/technical only — nav item hidden otherwise) with the crawler-enable gate
+  surfaced as an error message, not just a disabled control.
+- Tests: 43 passing (dedup, changed-deadline, runner retry/failure-isolation/rate-limit,
+  API role-gating and filtering) — see the progress log below for one Postgres-only bug
+  these caught only once run against a real database, not SQLite.
+
+## Sprint 3 — Document management ✅
 
 **Scope:** document download/validation pipeline, PDF/DOCX/XLSX text extraction, OCR
 fallback for scanned pages, chunking strategy, document viewer in the UI, storage in
@@ -49,6 +89,54 @@ MinIO/S3 with checksum + status tracking.
 
 **Exit criteria:** upload a sample scanned and a sample native PDF; both extract
 correctly; OCR-failure and missing-document test cases pass.
+
+**What shipped:**
+- `app/document_processing/storage/{base,local_backend,s3_backend}.py` — a storage
+  interface with two implementations: S3-compatible (MinIO in Docker, boto3) and a plain
+  filesystem backend for dev environments without MinIO running (this project's native
+  Postgres local setup). Selected via `settings.storage_provider` ("minio"\|"s3"\|"local").
+- `app/document_processing/{downloader,validators}.py` — size-limited download; content
+  type is detected from the bytes themselves via `python-magic` (never trusted from a
+  filename or a portal's claimed type), with a ZIP-internals fallback (`word/document.xml`
+  vs `xl/workbook.xml`) for the specific OOXML gap in this system's magic database (Word
+  files came back as `application/octet-stream` from `magic` alone — found by actually
+  running it, not assumed).
+- `app/document_processing/extractors/{pdf,docx,xlsx,zip}_extractor.py` — native text
+  extraction for all four formats brief §7 lists (PDF/DOC/DOCX/XLS/XLSX/ZIP). Verified
+  against **real files**, not mocks: a DOCX authored with `python-docx`, converted to a
+  genuine multi-paragraph PDF via LibreOffice headless, an image-only PDF with no text
+  layer at all (for the OCR path), a real XLSX, and a ZIP bundling two of them — see
+  `scripts/generate_doc_fixtures.py` and `tests/fixtures/documents/`.
+- `app/document_processing/ocr.py` — pytesseract + pdf2image, raising `OcrUnavailableError`
+  if `tesseract-ocr`/`poppler-utils` aren't installed rather than crashing the caller.
+  **This environment genuinely doesn't have tesseract installed** — the brief's "test OCR
+  failures" case is exercised for real here, not mocked, and `OcrUnavailableError` is
+  caught and recorded per-page rather than failing the whole document. Docker's backend
+  image now installs both binaries (Dockerfile updated) for real OCR there.
+- `app/document_processing/chunking.py` — pure, directly-tested page-aware chunking with
+  overlap; not wired into persistence yet (no `tender_embeddings` table until Sprint 7),
+  ready for Sprint 4/7 to call.
+- `app/services/document_processing_service.py` — orchestrates the above; always leaves a
+  document in a terminal status (`DONE`/`FAILED`) with a readable `last_processing_error`
+  rather than letting a library exception escape. `upload_document()` is the Rule 12
+  manual-file-upload path (distinct from `manual_tender_service`, which only records
+  metadata/URLs) — validated before a row is even created.
+- API: `POST /tenders/{id}/documents` (upload), `POST .../documents/{id}/process`,
+  `GET .../documents/{id}` (incl. extracted text), `GET .../documents/{id}/download`
+  (always authenticated — never a public path, brief §20).
+- Frontend: a `DocumentsPanel` on the tender detail page — upload, a process button per
+  document, status chips for extraction/OCR, an authenticated download (blob fetch, since
+  a plain `<a href>` can't carry the bearer token), and an expandable extracted-text viewer.
+- **Known gap, not an engineering failure:** GeM's own `showbidDocument/{id}` URLs (used
+  as `tender_documents.source_url` by the GeM connector) return HTTP 200 with a
+  `Content-Disposition: attachment` header but a genuinely empty body — confirmed across
+  8 freshly-sampled bids, regardless of session cookies or `Referer`. GeM's actual
+  document delivery needs a fuller browser-session flow than plain HTTP calls replicate;
+  not investigated further this sprint (open-ended reverse-engineering, no tool available
+  here to inspect real browser network traffic). The manual-upload path works fully and
+  was used for all genuine extraction testing.
+- Tests: 30 new (extractors, chunking, document processing service, API) — 75 passing
+  total.
 
 ## Sprint 4 — Tender intelligence
 
@@ -107,3 +195,8 @@ verified; test coverage report produced; a documented, repeatable deployment pro
 | Date | Sprint | Note |
 |---|---|---|
 | 2026-10-03 | 1 | Repo scaffolded; docs written; Docker Compose, backend, frontend, migrations, auth, and tests implemented. Backend: 18/18 pytest passing (SQLite-backed test DB) + Alembic migration verified upgrade/downgrade against a real SQLite file. Frontend: build, lint, and vitest all passing on Node 20. Full `docker compose up` against the real Postgres/Redis/MinIO/Nginx containers not run — no Docker daemon available in this environment; left for the next session/machine with Docker. |
+| 2026-10-04 | 1 | Ran the full stack locally without Docker instead (native Postgres 14 + Redis on the dev machine, since no Docker daemon was available): migration applied, admin user created, backend+frontend both verified reachable and functioning end-to-end via real HTTP calls (login, dashboard). |
+| 2026-10-04 | 2 | Source registry, connector base/runner, tender ingestion+dedup, manual-entry fallback, search/filter API, and the corresponding frontend pages all implemented and verified against the real local Postgres (not just the SQLite test DB). 43 backend tests passing. Caught and fixed a real Postgres-only bug this way: plain `json` columns broke `SELECT DISTINCT` on tender search (no equality operator) — SQLite's permissive typing hid this entirely; fixed via migration `0003_json_to_jsonb` plus a dedicated Postgres integration test (`tests/integration/test_postgres_tender_search.py`) so it can't silently regress. Frontend verified via build/lint/route-reachability checks only — no real browser click-through was done (no browser automation tool available this session). |
+| 2026-10-04 | 2 | User asked for real crawled data from GeM/CPPP as originally scoped. Researched both portals' actual access policies before writing any connector (robots.txt + published Terms of Use/Copyright Policy) — both require advance written permission to reproduce content; user confirmed that permission is in place for GeM. Built `app/connectors/gem/` against GeM's real public `/all-bids-data` endpoint (the same one its own frontend uses — no login, no CAPTCHA). Live first run against the real local Postgres: 30 bids discovered, 29 new tenders created, 1 deduplicated. 5 new connector unit tests added (using a captured fixture, not live network) — 48 backend tests passing total. CPPP: same permission-required clause found in its Copyright Policy; no connector built for it yet pending the same confirmation. |
+| 2026-10-04 | 2 | User flagged that the first GeM crawl's results were all clustered on one closing date and not relevant to Stackerbee's focus areas — correctly diagnosed as a connector design choice (sort=soonest-closing + small page cap), not a real cutoff/filter. Reworked `discover()` to run one GeM full-text search per Stackerbee focus area (9 keywords) instead of pulling the unfiltered "all ongoing bids" feed, tagging each result with the matched category; added a defensive past-closing-date skip. Re-crawled: 156 bids discovered, 155 new, spread across all 9 categories and 24 different closing dates (Oct 5 – Nov 2), zero past-dated. 50 backend tests passing. |
+| 2026-10-04 | 3 | Document management: storage abstraction (local filesystem + S3/MinIO), download/validation, PDF/DOCX/XLSX/ZIP extraction, OCR fallback, chunking utility, orchestrating service, API, and a frontend documents panel. Verified against real generated files (DOCX→PDF via LibreOffice headless, an image-only PDF for the OCR path, a real XLSX, a ZIP bundle) rather than mocks — see `scripts/generate_doc_fixtures.py`. Tesseract genuinely isn't installed in this environment, so the brief's "test OCR failures" case was exercised for real, not simulated. Investigated why GeM's own bid-document URLs return empty bodies (confirmed across 8 fresh bids, not a one-off) — needs a fuller browser-session flow than plain HTTP replicates; left as a documented open item rather than pursued indefinitely. 75 backend tests passing; frontend build/lint/vitest all clean. |

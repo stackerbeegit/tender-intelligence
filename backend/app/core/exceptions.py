@@ -28,3 +28,24 @@ class RoleNotFoundError(DomainError):
 
 class InvalidTokenError(DomainError):
     pass
+
+
+class DocumentDownloadError(DomainError):
+    """The source URL could not be fetched (network error, non-2xx, timeout)."""
+
+
+class UnsupportedFileTypeError(DomainError):
+    """The file's detected content type isn't one we process (see
+    settings.allowed_document_mime_types)."""
+
+
+class FileTooLargeError(DomainError):
+    """Exceeds settings.max_document_size_bytes."""
+
+
+class OcrUnavailableError(DomainError):
+    """The tesseract binary (or poppler, for PDF-to-image rendering)
+    isn't installed/reachable. Raised rather than letting pytesseract's
+    own exception leak past this module, so every caller has one
+    exception type to catch regardless of which underlying tool is
+    missing."""

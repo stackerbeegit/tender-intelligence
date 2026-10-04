@@ -16,7 +16,7 @@ psycopg[binary]==3.2.3
 # --- Auth / security ---
 pyjwt==2.10.1
 passlib[bcrypt]==1.7.4
-bcrypt==4.2.1
+bcrypt==4.0.1
 
 # --- Caching / background jobs ---
 redis==5.2.1
@@ -27,6 +27,14 @@ httpx==0.28.1
 
 # --- Object storage (S3-compatible) ---
 boto3==1.35.90
+
+# --- Document processing (Sprint 3) ---
+pypdf==5.1.0
+python-docx==1.1.2
+openpyxl==3.1.5
+pytesseract==0.3.13
+pdf2image==1.17.0
+python-magic==0.4.27
 
 # --- Utilities ---
 python-dotenv==1.0.1

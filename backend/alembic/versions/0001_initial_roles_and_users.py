@@ -16,6 +16,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 from alembic import op
+from app.models.base import sa_json
 
 revision: str = "0001"
 down_revision: Union[str, None] = None
@@ -38,7 +39,7 @@ def upgrade() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("name", sa.String(length=50), nullable=False),
         sa.Column("description", sa.String(length=255), nullable=True),
-        sa.Column("permissions", sa.JSON(), nullable=False),
+        sa.Column("permissions", sa_json(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     )
@@ -65,7 +66,7 @@ def upgrade() -> None:
         sa.Column("action", sa.String(length=100), nullable=False),
         sa.Column("entity_type", sa.String(length=100), nullable=True),
         sa.Column("entity_id", sa.String(length=100), nullable=True),
-        sa.Column("details", sa.JSON(), nullable=False),
+        sa.Column("details", sa_json(), nullable=False),
         sa.Column("ip_address", sa.String(length=64), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),

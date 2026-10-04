@@ -1,7 +1,7 @@
-from sqlalchemy import JSON, String
+from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin, sa_json
 
 
 class Role(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -17,7 +17,7 @@ class Role(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    permissions: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    permissions: Mapped[list[str]] = mapped_column(sa_json(), default=list, nullable=False)
 
     users: Mapped[list["User"]] = relationship(back_populates="role")
 
