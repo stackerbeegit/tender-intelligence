@@ -16,6 +16,9 @@ from app.models.tender_document import TenderDocument  # noqa: F401
 from app.models.tender_deadline import TenderDeadline  # noqa: F401
 from app.models.tender_location import TenderLocation  # noqa: F401
 from app.models.tender_category import TenderCategory  # noqa: F401
+from app.models.tender_requirement import TenderRequirement  # noqa: F401
+from app.models.tender_eligibility import TenderEligibility  # noqa: F401
+from app.models.tender_analysis import TenderAnalysis  # noqa: F401
 
 __all__ = [
     "Base",
@@ -30,4 +33,7 @@ __all__ = [
     "TenderDeadline",
     "TenderLocation",
     "TenderCategory",
+    "TenderRequirement",
+    "TenderEligibility",
+    "TenderAnalysis",
 ]

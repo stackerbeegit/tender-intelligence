@@ -34,10 +34,11 @@ import httpx
 
 from app.connectors.base.base_connector import BaseConnector
 from app.connectors.base.types import DiscoveredTenderRef, NormalisedDocument, NormalisedTender
-from app.connectors.gem import parser
+from app.connectors.gem import location, parser
 from app.connectors.registry import register
 from app.core.config import get_settings
 from app.core.logging import get_logger
+from app.document_processing.extractors.pdf_extractor import extract_pdf
 from app.models.enums import DocumentType, OrganisationType, SourceType, TenderCategory, TenderStatus
 
 logger = get_logger(__name__)
@@ -71,11 +72,19 @@ class GemAccessError(RuntimeError):
 
 @register(SourceType.GEM)
 class GemConnector(BaseConnector):
-    def __init__(self, source, sleep_fn: Callable[[float], None] = time.sleep):
+    def __init__(
+        self,
+        source,
+        sleep_fn: Callable[[float], None] = time.sleep,
+        fetch_bid_pdfs: bool | None = None,
+    ):
         super().__init__(source)
         settings = get_settings()
         self._settings = settings
         self._sleep = sleep_fn
+        self._fetch_bid_pdfs = (
+            fetch_bid_pdfs if fetch_bid_pdfs is not None else settings.gem_extract_consignee_locations
+        )
         self._client = httpx.Client(
             base_url=settings.gem_bidplus_base_url,
             headers={"User-Agent": settings.crawler_user_agent},
@@ -165,18 +174,47 @@ class GemConnector(BaseConnector):
         bid_number = parser.unwrap(raw_tender["doc"], "b_bid_number", "unknown")
         return [{"file_name": f"{bid_number}.pdf", "source_url": ref.url, "document_type": DocumentType.NIT.value}]
 
+    def _bid_pdf_pages(self, url: str) -> list[str]:
+        """The bid PDF is the only place GeM states the delivery location.
+        One GET per bid, paced by CrawlerRunner's inter-item rate limit. Any
+        failure (RA bids serve an empty file, timeouts, unparseable PDFs) just
+        means no consignee location — never a failed tender."""
+        if not self._fetch_bid_pdfs:
+            return []
+        try:
+            response = self._client.get(url)
+            response.raise_for_status()
+            return extract_pdf(response.content).pages if response.content else []
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not read GeM bid PDF %s for consignee location: %s", url, exc)
+            return []
+
     def parse(self, raw_tender: dict, raw_documents: list[dict]) -> dict:
-        return {"bid": parser.unwrap_doc(raw_tender["doc"]), "category": raw_tender.get("category"), "documents": raw_documents}
+        bid = parser.unwrap_doc(raw_tender["doc"])
+        pages = self._bid_pdf_pages(raw_documents[0]["source_url"]) if raw_documents else []
+        if not pages and bid.get("b_id_parent"):
+            # Reverse-auction (RA) bids serve an empty PDF; the consignee table
+            # lives on the parent bid they were raised from.
+            pages = self._bid_pdf_pages(f"{self._settings.gem_bidplus_base_url}/showbidDocument/{bid['b_id_parent']}")
+        return {
+            "bid": bid,
+            "category": raw_tender.get("category"),
+            "documents": raw_documents,
+            "locations": location.consignee_locations(pages),
+        }
 
     def normalise(self, parsed: dict) -> NormalisedTender:
         bid = parsed["bid"]
         category = parsed.get("category")
+        buyer_state = location.state_from_department(bid.get("ba_official_details_deptName"))
         return NormalisedTender(
             source_tender_id=bid.get("b_bid_number"),
             tender_number=bid.get("b_bid_number"),
             title=bid.get("b_category_name") or f"GeM Bid {bid.get('b_bid_number')}",
             organisation_name=parser.organisation_name(bid),
-            organisation_type=OrganisationType.CENTRAL_GOVT,
+            # State-government buyer accounts are named "<Department> <State>".
+            organisation_type=OrganisationType.STATE_GOVT if buyer_state else OrganisationType.CENTRAL_GOVT,
+            organisation_state=buyer_state,
             url=f"{self._settings.gem_bidplus_base_url}/showbidDocument/{bid.get('b_id')}",
             published_date=(
                 d.date() if (d := parser.parse_gem_datetime(bid.get("final_start_date_sort"))) else None
@@ -184,8 +222,7 @@ class GemConnector(BaseConnector):
             closing_date=parser.parse_gem_datetime(bid.get("final_end_date_sort")),
             status=TenderStatus.OPEN,
             categories=(category,) if category else (),
-            # GeM's listing payload doesn't carry a delivery location — left empty
-            # rather than guessed; Sprint 3 document extraction may recover it.
+            locations=parsed.get("locations", ()),
             documents=tuple(
                 NormalisedDocument(
                     file_name=d["file_name"],

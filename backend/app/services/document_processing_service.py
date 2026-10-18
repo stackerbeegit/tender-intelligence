@@ -96,6 +96,7 @@ def process_document(db: Session, document: TenderDocument) -> TenderDocument:
                 logger.warning("OCR unavailable for document=%s page=%d: %s", document.id, page_index, exc)
 
         document.extracted_text = "\n\n".join(page.strip() for page in pages if page.strip()) or None
+        document.extracted_pages = [page.strip() for page in pages] if document.extracted_text else None
         document.page_count = len(pages)
         document.extraction_status = (
             ExtractionStatus.DONE if document.extracted_text else ExtractionStatus.FAILED

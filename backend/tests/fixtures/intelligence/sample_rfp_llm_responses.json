@@ -1,0 +1,127 @@
+{
+  "_comment": "What a model returns for tests/fixtures/documents/sample_rfp.pdf. Quotes are copied the way a model sees them (single line, PDF line breaks removed). Three items are deliberately bad and must be dropped: an invented AWS clause, a real clause cited on the wrong page, and a duplicate of the support clause. `_seen_on_page` (stripped before returning) is the page whose excerpt the model was reading when it produced the item; defaults to page_number.",
+  "requirements": [
+    {
+      "category": "contract",
+      "summary": "36-month contract from Go-Live including 12 months warranty",
+      "quote": "The contract period shall be 36 months from the date of Go-Live, including 12 months of warranty support.",
+      "page_number": 1,
+      "details": {"duration_months": 36}
+    },
+    {
+      "category": "technology",
+      "summary": "Open-source stack with PostgreSQL database",
+      "quote": "The solution shall be developed using an open-source technology stack with PostgreSQL as the database.",
+      "page_number": 2,
+      "details": {"technologies": ["PostgreSQL"]}
+    },
+    {
+      "category": "integration",
+      "summary": "Integrate with State Payment Gateway and DigiLocker via REST APIs",
+      "quote": "The portal shall integrate with the State Payment Gateway and DigiLocker through secure REST APIs.",
+      "page_number": 2,
+      "details": {"technologies": ["REST API", "DigiLocker"]}
+    },
+    {
+      "category": "support",
+      "summary": "24x7 helpdesk, 4-hour resolution for critical incidents",
+      "quote": "The bidder shall provide 24x7 helpdesk support with a maximum resolution time of 4 hours for critical incidents.",
+      "page_number": 2,
+      "details": {}
+    },
+    {
+      "category": "security",
+      "summary": "CERT-In empanelled security audit before Go-Live",
+      "quote": "The application must undergo a security audit by a CERT-In empanelled auditor before Go-Live.",
+      "page_number": 2,
+      "details": {}
+    },
+    {
+      "category": "manpower",
+      "summary": "1 Project Manager with 10+ years experience",
+      "quote": "Project Manager - 1 resource with minimum 10 years of experience in IT project delivery.",
+      "page_number": 2,
+      "details": {"role": "Project Manager", "resource_count": 1, "min_experience_years": 10}
+    },
+    {
+      "category": "manpower",
+      "summary": "4 Java Developers with 5+ years experience each",
+      "quote": "Java Developer - 4 resources with minimum 5 years of experience each.",
+      "page_number": 2,
+      "details": {"role": "Java Developer", "resource_count": 4, "min_experience_years": 5}
+    },
+    {
+      "category": "infrastructure",
+      "summary": "INVENTED: hosting on AWS GovCloud with Kubernetes",
+      "quote": "The solution shall be hosted on AWS GovCloud with Kubernetes orchestration.",
+      "page_number": 2,
+      "details": {"technologies": ["AWS", "Kubernetes"]}
+    },
+    {
+      "category": "manpower",
+      "summary": "WRONG PAGE: real clause from page 2 cited as page 3",
+      "quote": "Java Developer - 4 resources with minimum 5 years of experience each.",
+      "page_number": 3,
+      "_seen_on_page": 2,
+      "details": {"role": "Java Developer", "resource_count": 4}
+    },
+    {
+      "category": "support",
+      "summary": "DUPLICATE of the helpdesk clause",
+      "quote": "The bidder shall provide 24x7 helpdesk support with a maximum resolution time of 4 hours for critical incidents.",
+      "page_number": 2,
+      "details": {}
+    }
+  ],
+  "eligibility": [
+    {
+      "criterion_type": "turnover",
+      "summary": "Average annual turnover of at least ₹10 Cr over last 3 financial years",
+      "quote": "The bidder must have an average annual turnover of at least Rs. 10 Crore during the last three financial years.",
+      "page_number": 3,
+      "value": {"amount_inr": 100000000, "period_years": 3, "is_average": true}
+    },
+    {
+      "criterion_type": "similar_projects",
+      "summary": "3 similar Government/PSU projects of at least ₹2 Cr each",
+      "quote": "The bidder must have successfully completed at least 3 similar projects, each of value not less than Rs. 2 Crore, for Government or PSU clients.",
+      "page_number": 3,
+      "value": {"project_count": 3, "min_project_value_inr": 20000000}
+    },
+    {
+      "criterion_type": "certification",
+      "summary": "Valid ISO 27001 certification",
+      "quote": "The bidder must hold a valid ISO 27001 certification.",
+      "page_number": 3,
+      "value": {}
+    },
+    {
+      "criterion_type": "emd",
+      "summary": "EMD of ₹5,00,000",
+      "quote": "Earnest Money Deposit of Rs. 5,00,000 shall be submitted along with the bid.",
+      "page_number": 3,
+      "value": {"amount_inr": 500000}
+    },
+    {
+      "criterion_type": "msme_startup",
+      "summary": "MSEs registered with NSIC/Udyam exempt from EMD",
+      "quote": "Micro and Small Enterprises registered with NSIC or Udyam are exempted from payment of EMD as per the Public Procurement Policy for MSEs Order, 2012.",
+      "page_number": 3,
+      "value": {"msme_clause_kind": "emd_exemption"}
+    }
+  ],
+  "summary": {
+    "project": "Integrated Citizen Services Portal",
+    "overview": "Design, development, deployment and maintenance of a citizen services portal with web and mobile apps for the Department of Information Technology, Punjab.",
+    "contract_duration": "36 months from Go-Live [R1]",
+    "core_requirements": ["Open-source stack with PostgreSQL [R2]", "Payment Gateway and DigiLocker integration [R3]"],
+    "manpower": ["Project Manager - 1 (10+ yrs) [R6]", "Java Developer - 4 (5+ yrs) [R7]"],
+    "eligibility_highlights": ["Average turnover ₹10 Cr over 3 years [E1]", "3 similar projects of ₹2 Cr each [E2]"],
+    "msme_provisions": ["MSEs exempt from EMD [E5]"],
+    "points_to_review": ["24x7 support with 4-hour critical resolution [R4]", "₹10 Cr average turnover [E1]"],
+    "categories": [
+      {"category": "web_mobile_development", "confidence": 0.9},
+      {"category": "software_development", "confidence": 0.85}
+    ]
+  }
+}

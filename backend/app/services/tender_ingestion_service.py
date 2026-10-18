@@ -23,7 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.connectors.base.types import NormalisedTender
-from app.models.enums import DeadlineType, TenderStatus
+from app.models.enums import DeadlineType, OrganisationType, TenderStatus
 from app.models.tender import Tender
 from app.models.tender_category import TenderCategory
 from app.models.tender_deadline import TenderDeadline
@@ -61,6 +61,14 @@ def get_or_create_organisation(db: Session, normalised: NormalisedTender) -> Ten
     normalized_name = _normalize_text(normalised.organisation_name)
     existing = db.scalar(select(TenderOrganisation).where(TenderOrganisation.normalized_name == normalized_name))
     if existing:
+        # Fill in location fields a later connector version can supply, but
+        # never overwrite what's already set (e.g. by a manual edit).
+        if existing.state is None and normalised.organisation_state:
+            existing.state = normalised.organisation_state
+            if normalised.organisation_type == OrganisationType.STATE_GOVT:
+                existing.type = OrganisationType.STATE_GOVT
+        if existing.city is None and normalised.organisation_city:
+            existing.city = normalised.organisation_city
         return existing
 
     organisation = TenderOrganisation(
@@ -86,7 +94,24 @@ def _find_existing(db: Session, source_id: uuid.UUID, normalised: NormalisedTend
         if existing:
             return existing
 
-    return db.scalar(select(Tender).where(Tender.fingerprint_hash == fingerprint))
+    candidate = db.scalar(select(Tender).where(Tender.fingerprint_hash == fingerprint))
+    if candidate is not None and _is_distinct_listing(candidate, source_id, normalised):
+        return None
+    return candidate
+
+
+def _is_distinct_listing(candidate: Tender, source_id: uuid.UUID, normalised: NormalisedTender) -> bool:
+    """Two listings from the same source with different IDs are different
+    tenders, however alike they look. GeM routinely has several bids with
+    the same title, buyer and start date (e.g. one per site, or a bid and its
+    reverse auction); fingerprint matching is only for listings that carry
+    no ID of their own (manual entry) or come from another source."""
+    return (
+        normalised.source_tender_id is not None
+        and candidate.source_id == source_id
+        and candidate.source_tender_id is not None
+        and candidate.source_tender_id != normalised.source_tender_id
+    )
 
 
 def _comparable(dt: datetime) -> datetime:
@@ -161,10 +186,11 @@ def ingest_tender(db: Session, source_id: uuid.UUID, normalised: NormalisedTende
         existing.emd_amount = normalised.emd_amount if normalised.emd_amount is not None else existing.emd_amount
         existing.tender_fee = normalised.tender_fee if normalised.tender_fee is not None else existing.tender_fee
         existing.raw_metadata = {**existing.raw_metadata, **normalised.raw_metadata}
-        if existing.organisation_id is None:
-            organisation = get_or_create_organisation(db, normalised)
-            if organisation:
-                existing.organisation_id = organisation.id
+        # Called even when already linked so a newer connector can backfill
+        # the organisation's missing location fields.
+        organisation = get_or_create_organisation(db, normalised)
+        if organisation and existing.organisation_id is None:
+            existing.organisation_id = organisation.id
 
         _apply_deadline_change(db, existing, normalised.closing_date)
         db.flush()
@@ -173,6 +199,12 @@ def ingest_tender(db: Session, source_id: uuid.UUID, normalised: NormalisedTende
         db.commit()
         db.refresh(existing)
         return existing, False
+
+    if db.scalar(select(Tender.id).where(Tender.fingerprint_hash == fingerprint)) is not None:
+        # A look-alike listing from this source already holds the fingerprint
+        # (see _is_distinct_listing); fingerprint_hash is unique, so make this
+        # one's distinct by folding in its own ID.
+        fingerprint = hashlib.sha256(f"{fingerprint}|{normalised.source_tender_id}".encode("utf-8")).hexdigest()
 
     organisation = get_or_create_organisation(db, normalised)
     tender = Tender(

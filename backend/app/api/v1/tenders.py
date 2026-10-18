@@ -53,6 +53,11 @@ def list_tenders(
     return TenderListResponse(items=items, total=total, page=page, page_size=page_size)
 
 
+@router.get("/states", response_model=list[str])
+def list_tender_states(db: Session = Depends(get_db), _user: User = Depends(get_current_user)) -> list[str]:
+    return TenderRepository(db).list_states()
+
+
 @router.get("/{tender_id}", response_model=TenderDetail)
 def get_tender(tender_id: uuid.UUID, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     tender = TenderRepository(db).get_by_id(tender_id)

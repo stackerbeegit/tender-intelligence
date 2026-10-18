@@ -36,6 +36,11 @@ pytesseract==0.3.13
 pdf2image==1.17.0
 python-magic==0.4.27
 
+# --- LLM providers (Sprint 4) ---
+# Only app/intelligence/llm/anthropic_client.py imports this. The
+# OpenAI-compatible adapter uses httpx directly (no vendor SDK needed).
+anthropic==1.11.0
+
 # --- Utilities ---
 python-dotenv==1.0.1
 tenacity==9.0.0

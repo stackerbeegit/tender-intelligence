@@ -4,7 +4,7 @@ from sqlalchemy import BigInteger, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin, sa_enum
+from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin, sa_enum, sa_json
 from app.models.enums import DocumentType, ExtractionStatus, OcrStatus
 
 
@@ -35,6 +35,10 @@ class TenderDocument(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Same text, one entry per page (index 0 = page 1). This is what the
+    # Sprint 4 intelligence layer reads, so every extracted fact can cite
+    # a page — `extracted_text` alone loses the page boundaries.
+    extracted_pages: Mapped[list[str] | None] = mapped_column(sa_json(), nullable=True)
     last_processing_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     tender: Mapped["Tender"] = relationship(back_populates="documents")  # noqa: F821

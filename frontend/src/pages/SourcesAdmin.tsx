@@ -18,10 +18,10 @@ import {
   TableHead,
   TableRow,
   TextField,
-  Typography,
 } from "@mui/material";
 import { useEffect, useState } from "react";
 
+import { PageHeader } from "@/components/PageHeader";
 import { AppLayout } from "@/layouts/AppLayout";
 import { sourceService } from "@/services/sourceService";
 import type { Source, SourceStatus, SourceType } from "@/types/tender";
@@ -88,19 +88,21 @@ export function SourcesAdmin() {
 
   return (
     <AppLayout>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-        <Typography variant="h5" fontWeight={600}>
-          Sources
-        </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
-          Add Source
-        </Button>
-      </Stack>
-
-      <Typography variant="body2" color="text.secondary" mb={2}>
-        A crawler can only be enabled once <code>terms_access_notes</code> documents that automated access is
-        permitted for that source (Rule 11) — no portal is crawled without that check first.
-      </Typography>
+      <PageHeader
+        eyebrow="Administration"
+        title="Sources"
+        subtitle={
+          <>
+            A crawler can only be enabled once <code>terms_access_notes</code> documents that automated access is
+            permitted for that source (Rule 11) — no portal is crawled without that check first.
+          </>
+        }
+        actions={
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>
+            Add Source
+          </Button>
+        }
+      />
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>

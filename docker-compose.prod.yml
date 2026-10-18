@@ -1,0 +1,140 @@
+# Production stack for the internal Stackerbee deployment.
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+#
+# Differences from docker-compose.yml (dev): the frontend is a built static
+# bundle served by nginx, the backend runs without --reload, migrations run
+# automatically before the app starts, and only the `web` port is published —
+# Postgres and Redis are reachable from inside the Docker network only.
+# Documents use the local-filesystem storage backend on a named volume.
+# See docs/deployment.md.
+name: stackerbee-tender-prod
+
+x-backend-build: &backend-build
+  context: ./backend
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/1
+  CELERY_RESULT_BACKEND: redis://redis:6379/2
+  STORAGE_PROVIDER: local
+  LOCAL_STORAGE_PATH: /app/storage/documents
+  ENVIRONMENT: production
+  DEBUG: "false"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infrastructure/docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Applies database migrations, then exits. backend/worker/beat wait for it.
+  migrate:
+    build: *backend-build
+    image: stackerbee-tender-backend:latest
+    env_file: .env
+    environment: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: alembic upgrade head
+    restart: "no"
+
+  backend:
+    build: *backend-build
+    image: stackerbee-tender-backend:latest
+    restart: unless-stopped
+    env_file: .env
+    environment: *backend-env
+    volumes:
+      - documents:/app/storage/documents
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    command: >
+      uvicorn app.main:app --host 0.0.0.0 --port 8000
+      --workers ${BACKEND_WORKERS:-2} --proxy-headers --forwarded-allow-ips=*
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # Runs the nightly crawl (and any future background tasks).
+  worker:
+    build: *backend-build
+    image: stackerbee-tender-backend:latest
+    restart: unless-stopped
+    env_file: .env
+    environment: *backend-env
+    volumes:
+      - documents:/app/storage/documents
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    command: celery -A app.workers.celery_app worker --loglevel=INFO --concurrency=1
+
+  # Fires the daily crawl at SCHEDULED_CRAWL_HOUR:MINUTE (default 01:00 IST).
+  # Keep exactly one beat container, or the crawl is queued twice.
+  beat:
+    build: *backend-build
+    image: stackerbee-tender-backend:latest
+    restart: unless-stopped
+    env_file: .env
+    environment: *backend-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    command: celery -A app.workers.celery_app beat --loglevel=INFO --schedule=/tmp/celerybeat-schedule
+
+  # Built React app + reverse proxy. The only published port.
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    volumes:
+      - ./infrastructure/nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      # Set WEB_BIND to e.g. 100.x.y.z:80 (the server's Tailscale IP) to listen
+      # on the private network only.
+      - "${WEB_BIND:-80}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:
+  documents:

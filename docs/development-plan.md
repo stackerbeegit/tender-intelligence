@@ -138,7 +138,7 @@ correctly; OCR-failure and missing-document test cases pass.
 - Tests: 30 new (extractors, chunking, document processing service, API) — 75 passing
   total.
 
-## Sprint 4 — Tender intelligence
+## Sprint 4 — Tender intelligence ✅
 
 **Scope:** LLM abstraction layer (Anthropic/OpenAI-compatible adapters), structured
 extraction of technical/manpower/financial/experience/MSME clauses into
@@ -148,6 +148,62 @@ extraction of technical/manpower/financial/experience/MSME clauses into
 **Exit criteria:** representative sample tender documents produce extraction output
 matching an expected structured fixture in tests; every extracted fact carries a
 document/page citation.
+
+**What shipped:**
+- **Per-page text.** Sprint 3 stored only the joined `extracted_text`, losing page
+  boundaries — so no fact could cite a page. `tender_documents.extracted_pages` (jsonb,
+  one string per page) is now written by `document_processing_service`; documents
+  processed before migration `0005` are re-processed automatically on their next analysis.
+- `app/intelligence/llm/` — `LLMClient.complete_json(system, user, schema)` with two
+  adapters chosen by `LLM_PROVIDER`: **Anthropic** (official `anthropic` SDK, structured
+  outputs via `output_config.format`, effort via `ANTHROPIC_EFFORT`, streaming, server-side
+  refusal fallback via `fallbacks="default"`) and **OpenAI-compatible** (plain httpx against
+  `{OPENAI_BASE_URL}/chat/completions` with a strict `json_schema` — works for OpenAI or a
+  self-hosted vLLM/Ollama endpoint). Vendor errors, refusals, truncation and non-JSON output
+  all become one `LLMResponseError`. Default model `claude-opus-5-5`.
+- `app/intelligence/extraction/` — pages are batched into excerpts of at most
+  `LLM_MAX_CHARS_PER_CALL` characters (a large tender is never sent whole; an oversized
+  page is split but keeps its page number). The model must return, per item, a **verbatim
+  quote + page number**, a short summary, and typed structured fields (manpower role/count/
+  experience, turnover amount/period/average, project count/value, MSME clause kind, ...).
+- **Citation verification (`citations.py`) — the key design decision.** Every returned item
+  is kept only if its quote is actually found on the cited page (after normalising PDF line
+  breaks, hyphenation, quotes/dashes and case). Invented clauses, paraphrases and wrong-page
+  citations are dropped and counted in `tender_analysis.run_stats`, with examples, so a
+  reviewer can see what was discarded. This makes "every fact carries a citation" a code
+  guarantee rather than a prompt request.
+- `app/intelligence/summary.py` — the executive summary (brief Module 10) and category
+  classification are generated **from the verified fact rows**, not raw document text, so
+  the summary can only restate cited facts. Bullets reference facts by id (`[R3]`, `[E1]`),
+  mapped to stored row UUIDs in `summary.fact_refs`. Categories are written to
+  `tender_categories` with a `confidence`; manually set categories are never overwritten.
+- `app/services/tender_intelligence_service.py` — runs the pipeline; facts are replaced
+  all-or-nothing in the same transaction as the summary, so a failed run keeps the previous
+  results and records `status=failed` + the reason on `tender_analysis`.
+- API: `POST /tenders/{id}/analysis` (run; admin/bd_manager/technical), `GET
+  /tenders/{id}/analysis` (summary + facts with `{document, file_name, page}` citations),
+  `GET /tenders/{id}/eligibility` (eligibility facts only, brief §19).
+- Frontend: a "Tender Intelligence" panel on the tender detail page — summary boxed and
+  labelled **AI INTERPRETATION**, facts labelled **FACT** with the verbatim clause and a
+  clickable `file · p.N` citation that downloads the source document; AI-assigned category
+  chips show their confidence and are visually distinct from manual ones.
+- Tests: representative 3-page RFP (`tests/fixtures/documents/sample_rfp.pdf`, real PDF
+  generated via LibreOffice) → stored facts match `tests/fixtures/intelligence/
+  sample_rfp_expected.json` exactly. The scripted model responses deliberately include an
+  invented clause, a wrong-page citation and a duplicate; all three are verified dropped.
+  Plus adapter tests (OpenAI via httpx MockTransport, Anthropic at the SDK boundary),
+  batching, citation normalisation, re-run/failure/unconfigured paths, API/RBAC, and a
+  frontend test for the FACT/INTERPRETATION labelling. A mutation check (citation check
+  disabled) makes 11 of these tests fail. 126 backend + 4 frontend tests passing.
+- **Not yet verified: a run against a real model.** No API key was available in this
+  environment, so the tests use a scripted `FakeLLMClient` (`tests/support/fake_llm.py`).
+  They prove everything around the model (batching, verification, persistence, failure
+  handling) but not extraction quality. First thing to do with a key: run the analysis on
+  a few real tenders and review the dropped-item counts and extracted facts.
+- **Known limitations:** analysis runs synchronously in the request (as Sprint 3's document
+  processing does) — fine for a handful of documents, but should move to a Celery worker
+  (Sprint 8). A clause that straddles the split point of an oversized page can't be
+  verified and is dropped.
 
 ## Sprint 5 — Matching, eligibility, relevance, risk
 
@@ -200,3 +256,4 @@ verified; test coverage report produced; a documented, repeatable deployment pro
 | 2026-10-04 | 2 | User asked for real crawled data from GeM/CPPP as originally scoped. Researched both portals' actual access policies before writing any connector (robots.txt + published Terms of Use/Copyright Policy) — both require advance written permission to reproduce content; user confirmed that permission is in place for GeM. Built `app/connectors/gem/` against GeM's real public `/all-bids-data` endpoint (the same one its own frontend uses — no login, no CAPTCHA). Live first run against the real local Postgres: 30 bids discovered, 29 new tenders created, 1 deduplicated. 5 new connector unit tests added (using a captured fixture, not live network) — 48 backend tests passing total. CPPP: same permission-required clause found in its Copyright Policy; no connector built for it yet pending the same confirmation. |
 | 2026-10-04 | 2 | User flagged that the first GeM crawl's results were all clustered on one closing date and not relevant to Stackerbee's focus areas — correctly diagnosed as a connector design choice (sort=soonest-closing + small page cap), not a real cutoff/filter. Reworked `discover()` to run one GeM full-text search per Stackerbee focus area (9 keywords) instead of pulling the unfiltered "all ongoing bids" feed, tagging each result with the matched category; added a defensive past-closing-date skip. Re-crawled: 156 bids discovered, 155 new, spread across all 9 categories and 24 different closing dates (Oct 5 – Nov 2), zero past-dated. 50 backend tests passing. |
 | 2026-10-04 | 3 | Document management: storage abstraction (local filesystem + S3/MinIO), download/validation, PDF/DOCX/XLSX/ZIP extraction, OCR fallback, chunking utility, orchestrating service, API, and a frontend documents panel. Verified against real generated files (DOCX→PDF via LibreOffice headless, an image-only PDF for the OCR path, a real XLSX, a ZIP bundle) rather than mocks — see `scripts/generate_doc_fixtures.py`. Tesseract genuinely isn't installed in this environment, so the brief's "test OCR failures" case was exercised for real, not simulated. Investigated why GeM's own bid-document URLs return empty bodies (confirmed across 8 fresh bids, not a one-off) — needs a fuller browser-session flow than plain HTTP replicates; left as a documented open item rather than pursued indefinitely. 75 backend tests passing; frontend build/lint/vitest all clean. |
+| 2026-10-04 | 4 | Tender intelligence: provider-agnostic LLM layer (Anthropic SDK + OpenAI-compatible httpx adapters), page-batched structured extraction of requirements/eligibility/MSME clauses, deterministic citation verification (a fact is stored only if its verbatim quote is found on the cited page), fact-grounded executive summary + AI category classification, API and frontend panel with FACT vs AI INTERPRETATION labelling. Fixed a Sprint 3 gap found on the way: documents kept only joined text, losing page numbers — added `extracted_pages` (migration `0005`, applied to the local Postgres). 126 backend tests + 4 frontend tests passing; endpoints exercised against the live local backend. No LLM API key available, so no real-model run yet — tests use a scripted fake. |

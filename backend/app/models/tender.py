@@ -50,6 +50,15 @@ class Tender(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     documents: Mapped[list["TenderDocument"]] = relationship(
         back_populates="tender", cascade="all, delete-orphan"
     )
+    requirements: Mapped[list["TenderRequirement"]] = relationship(  # noqa: F821
+        back_populates="tender", cascade="all, delete-orphan", order_by="TenderRequirement.page_number"
+    )
+    eligibility_criteria: Mapped[list["TenderEligibility"]] = relationship(  # noqa: F821
+        back_populates="tender", cascade="all, delete-orphan", order_by="TenderEligibility.page_number"
+    )
+    analysis: Mapped["TenderAnalysis | None"] = relationship(  # noqa: F821
+        back_populates="tender", cascade="all, delete-orphan", uselist=False
+    )
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Tender {self.title[:40]!r}>"

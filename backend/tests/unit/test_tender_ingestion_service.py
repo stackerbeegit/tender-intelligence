@@ -110,3 +110,35 @@ def test_documents_and_locations_are_attached_without_duplication(db_session, sa
     )
     assert len(updated.documents) == 1
     assert len(updated.locations) == 1
+
+
+def test_lookalike_bids_from_same_source_stay_separate(db_session, sample_source):
+    """GeM lists different bids with identical title/buyer/start date. Each
+    must be its own tender, and re-crawling must not flip their deadlines."""
+    first = _tender(source_tender_id="GEM/2026/B/1", tender_value=None)
+    second = _tender(
+        source_tender_id="GEM/2026/R/2",
+        tender_value=None,
+        closing_date=datetime(2026, 2, 9, 17, 0, tzinfo=timezone.utc),
+    )
+
+    for _ in range(3):  # three crawls
+        t1, _ = tender_ingestion_service.ingest_tender(db_session, sample_source.id, first)
+        t2, _ = tender_ingestion_service.ingest_tender(db_session, sample_source.id, second)
+
+    assert t1.id != t2.id
+    assert t1.fingerprint_hash != t2.fingerprint_hash
+    for tender, expected in ((t1, first), (t2, second)):
+        db_session.refresh(tender)
+        assert tender.closing_date.replace(tzinfo=timezone.utc) == expected.closing_date
+        assert [d.deadline_type for d in tender.deadlines] == [DeadlineType.BID_SUBMISSION]
+        assert tender.status == TenderStatus.OPEN
+
+
+def test_listing_without_id_still_matches_by_fingerprint(db_session, sample_source):
+    crawled, _ = tender_ingestion_service.ingest_tender(db_session, sample_source.id, _tender())
+    manual, created = tender_ingestion_service.ingest_tender(
+        db_session, sample_source.id, _tender(source_tender_id=None)
+    )
+    assert created is False
+    assert manual.id == crawled.id

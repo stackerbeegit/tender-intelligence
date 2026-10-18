@@ -111,7 +111,7 @@ def test_users_list_allowed_for_admin(client):
     assert len(response.json()) == 1
 
 
-def test_dashboard_summary_requires_auth_and_labels_placeholder_data(client):
+def test_dashboard_summary_requires_auth_and_marks_unbuilt_metrics_as_pending(client):
     unauthenticated = client.get("/api/v1/dashboard/summary")
     assert unauthenticated.status_code == 401
 
@@ -125,4 +125,5 @@ def test_dashboard_summary_requires_auth_and_labels_placeholder_data(client):
     assert response.status_code == 200
     body = response.json()
     assert body["new_tenders"] == 0
-    assert "placeholder" in body["note"].lower()
+    assert body["won"] is None
+    assert "Sprint 6" in body["pending_metrics"]["won"]

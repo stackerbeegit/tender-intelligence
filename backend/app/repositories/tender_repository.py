@@ -3,8 +3,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import exists, func, or_, select, union
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.models.enums import TenderCategory as TenderCategoryEnum
 from app.models.enums import TenderStatus
@@ -72,12 +72,20 @@ class TenderRepository:
             stmt = stmt.where(Tender.closing_date >= filters.closing_after)
         if filters.closing_before:
             stmt = stmt.where(Tender.closing_date <= filters.closing_before)
-        if filters.state or filters.city:
-            stmt = stmt.join(TenderLocation, TenderLocation.tender_id == Tender.id)
-            if filters.state:
-                stmt = stmt.where(TenderLocation.state == filters.state)
-            if filters.city:
-                stmt = stmt.where(TenderLocation.city == filters.city)
+        if filters.state:
+            # A tender "belongs to" a state if it delivers there or its buyer
+            # sits there — GeM state-government bids often only have the latter.
+            state = filters.state.lower()
+            stmt = stmt.where(
+                or_(
+                    exists().where(TenderLocation.tender_id == Tender.id, func.lower(TenderLocation.state) == state),
+                    exists().where(
+                        TenderOrganisation.id == Tender.organisation_id, func.lower(TenderOrganisation.state) == state
+                    ),
+                )
+            )
+        if filters.city:
+            stmt = stmt.where(exists().where(TenderLocation.tender_id == Tender.id, TenderLocation.city == filters.city))
         if filters.category:
             stmt = stmt.join(TenderCategory, TenderCategory.tender_id == Tender.id).where(
                 TenderCategory.category == filters.category
@@ -92,5 +100,17 @@ class TenderRepository:
             .offset((filters.page - 1) * filters.page_size)
             .limit(filters.page_size)
         )
-        items = list(self.db.scalars(stmt).unique())
+        # selectinload (a second IN query), not joinedload: a JOIN would
+        # multiply rows and break the LIMIT/OFFSET pagination above.
+        items = list(
+            self.db.scalars(stmt.options(selectinload(Tender.categories), selectinload(Tender.locations))).unique()
+        )
         return items, total or 0
+
+    def list_states(self) -> list[str]:
+        """Every state any tender delivers to or has a buyer in."""
+        stmt = union(
+            select(TenderLocation.state).where(TenderLocation.state.is_not(None)),
+            select(TenderOrganisation.state).where(TenderOrganisation.state.is_not(None)),
+        )
+        return sorted(self.db.scalars(stmt).all())

@@ -86,3 +86,40 @@ class ExtractionStatus(str, Enum):
     PENDING = "pending"
     DONE = "done"
     FAILED = "failed"
+
+
+class RequirementCategory(str, Enum):
+    """Brief §8 'Technical' and 'Manpower' groups."""
+
+    TECHNOLOGY = "technology"  # required technologies / software / platforms
+    INFRASTRUCTURE = "infrastructure"
+    INTEGRATION = "integration"
+    SUPPORT = "support"
+    SLA = "sla"
+    SECURITY = "security"
+    CERTIFICATION = "certification"
+    MANPOWER = "manpower"
+    CONTRACT = "contract"  # contract duration, delivery timelines
+    OTHER = "other"
+
+
+class EligibilityCriterionType(str, Enum):
+    """Brief §8 'Financial', 'Experience' and 'MSME / Startup' groups."""
+
+    TURNOVER = "turnover"
+    NET_WORTH = "net_worth"
+    EMD = "emd"
+    TENDER_FEE = "tender_fee"
+    PERFORMANCE_SECURITY = "performance_security"
+    SIMILAR_PROJECTS = "similar_projects"
+    YEARS_OF_EXPERIENCE = "years_of_experience"
+    GOVERNMENT_EXPERIENCE = "government_experience"
+    CERTIFICATION = "certification"
+    MSME_STARTUP = "msme_startup"
+    OTHER = "other"
+
+
+class AnalysisStatus(str, Enum):
+    RUNNING = "running"
+    DONE = "done"
+    FAILED = "failed"

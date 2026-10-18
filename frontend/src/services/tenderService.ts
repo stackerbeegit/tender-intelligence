@@ -7,6 +7,11 @@ export const tenderService = {
     return data;
   },
 
+  async states(): Promise<string[]> {
+    const { data } = await api.get<string[]>("/tenders/states");
+    return data;
+  },
+
   async get(id: string): Promise<TenderDetail> {
     const { data } = await api.get<TenderDetail>(`/tenders/${id}`);
     return data;

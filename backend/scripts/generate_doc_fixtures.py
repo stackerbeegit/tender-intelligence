@@ -84,6 +84,73 @@ def make_zip(pdf_path: Path, xlsx_path: Path) -> Path:
     return path
 
 
+RFP_PAGES: list[tuple[str, list[str]]] = [
+    (
+        "Request for Proposal: Development of Integrated Citizen Services Portal",
+        [
+            "Issued by: Department of Information Technology, Government of Punjab.",
+            "RFP No: DIT/PB/2026/ICSP-014",
+            "The Department invites proposals from eligible bidders for the design, development, "
+            "deployment and maintenance of an Integrated Citizen Services Portal with web and mobile "
+            "applications.",
+            "The contract period shall be 36 months from the date of Go-Live, including 12 months of "
+            "warranty support.",
+        ],
+    ),
+    (
+        "Section 4: Technical and Manpower Requirements",
+        [
+            "The solution shall be developed using an open-source technology stack with PostgreSQL "
+            "as the database.",
+            "The portal shall integrate with the State Payment Gateway and DigiLocker through "
+            "secure REST APIs.",
+            "The bidder shall provide 24x7 helpdesk support with a maximum resolution time of 4 hours "
+            "for critical incidents.",
+            "The application must undergo a security audit by a CERT-In empanelled auditor before Go-Live.",
+            "Project Manager - 1 resource with minimum 10 years of experience in IT project delivery.",
+            "Java Developer - 4 resources with minimum 5 years of experience each.",
+        ],
+    ),
+    (
+        "Section 5: Pre-Qualification Criteria",
+        [
+            "The bidder must have an average annual turnover of at least Rs. 10 Crore during the last "
+            "three financial years.",
+            "The bidder must have successfully completed at least 3 similar projects, each of value not "
+            "less than Rs. 2 Crore, for Government or PSU clients.",
+            "The bidder must hold a valid ISO 27001 certification.",
+            "Earnest Money Deposit of Rs. 5,00,000 shall be submitted along with the bid.",
+            "Micro and Small Enterprises registered with NSIC or Udyam are exempted from payment of "
+            "EMD as per the Public Procurement Policy for MSEs Order, 2012.",
+        ],
+    ),
+]
+
+
+def make_rfp_pdf() -> Path:
+    """Sprint 4: a representative 3-page RFP whose clauses
+    tests/fixtures/intelligence/sample_rfp_expected.json describes. One
+    section per page (explicit page breaks) so page citations are
+    deterministic."""
+    doc = Document()
+    for index, (heading, paragraphs) in enumerate(RFP_PAGES):
+        if index:
+            doc.add_page_break()
+        doc.add_heading(heading, level=1)
+        for text in paragraphs:
+            doc.add_paragraph(text)
+
+    docx_path = FIXTURES_DIR / "sample_rfp.docx"
+    doc.save(docx_path)
+    subprocess.run(
+        ["soffice", "--headless", "--convert-to", "pdf", "--outdir", str(FIXTURES_DIR), str(docx_path)],
+        check=True,
+        capture_output=True,
+    )
+    docx_path.unlink()  # only the PDF is a fixture
+    return FIXTURES_DIR / "sample_rfp.pdf"
+
+
 def main() -> None:
     FIXTURES_DIR.mkdir(parents=True, exist_ok=True)
     docx_path = make_docx()
@@ -91,8 +158,9 @@ def main() -> None:
     scanned_path = make_scanned_pdf(pdf_path)
     xlsx_path = make_xlsx()
     zip_path = make_zip(pdf_path, xlsx_path)
+    rfp_path = make_rfp_pdf()
 
-    for p in (docx_path, pdf_path, scanned_path, xlsx_path, zip_path):
+    for p in (docx_path, pdf_path, scanned_path, xlsx_path, zip_path, rfp_path):
         print(f"{p.name}: {p.stat().st_size} bytes")
 
 

@@ -92,6 +92,7 @@ def test_list_tenders_filters_by_keyword(client):
     body = response.json()
     assert body["total"] == 1
     assert "Cybersecurity" in body["items"][0]["title"]
+    assert [c["category"] for c in body["items"][0]["categories"]] == ["networking_infrastructure"]
 
 
 def test_list_tenders_filters_by_value_range(client):
@@ -111,3 +112,27 @@ def test_list_tenders_filters_by_value_range(client):
     body = response.json()
     assert body["total"] == 1
     assert body["items"][0]["title"] == "Large project"
+
+
+def test_list_tenders_filters_by_delivery_or_buyer_state(client):
+    headers = _register_and_login(client, "bd6@stackerbee.com", "bd_manager")
+    client.post("/api/v1/tenders/manual", headers=headers, json=_manual_tender_payload(title="Delivered in Karnataka"))
+    client.post(
+        "/api/v1/tenders/manual",
+        headers=headers,
+        json=_manual_tender_payload(
+            title="Gujarat buyer, no delivery location",
+            organisation_name="Panchayats Department Gujarat",
+            organisation_state="Gujarat",
+            locations=[],
+        ),
+    )
+
+    karnataka = client.get("/api/v1/tenders", headers=headers, params={"state": "karnataka"}).json()
+    assert [t["title"] for t in karnataka["items"]] == ["Delivered in Karnataka"]
+    assert karnataka["items"][0]["locations"][0]["state"] == "Karnataka"
+
+    gujarat = client.get("/api/v1/tenders", headers=headers, params={"state": "Gujarat"}).json()
+    assert [t["title"] for t in gujarat["items"]] == ["Gujarat buyer, no delivery location"]
+
+    assert client.get("/api/v1/tenders/states", headers=headers).json() == ["Gujarat", "Karnataka"]

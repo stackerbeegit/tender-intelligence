@@ -9,4 +9,11 @@ describe("MetricCard", () => {
     expect(screen.getByText("New Tenders")).toBeInTheDocument();
     expect(screen.getByText("42")).toBeInTheDocument();
   });
+
+  it("shows a dash and the reason for a metric that is not available yet", () => {
+    render(<MetricCard label="Won" value={null} hint="Needs the opportunity CRM (Sprint 6)." />);
+    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.queryByText("0")).not.toBeInTheDocument();
+    expect(screen.getByText("Needs the opportunity CRM (Sprint 6).")).toBeInTheDocument();
+  });
 });

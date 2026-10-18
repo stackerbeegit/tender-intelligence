@@ -16,6 +16,7 @@ import {
 import { type FormEvent, useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 
+import { PageHeader } from "@/components/PageHeader";
 import { AppLayout } from "@/layouts/AppLayout";
 import { tenderService } from "@/services/tenderService";
 import { TENDER_CATEGORY_LABELS, type ManualTenderCreate, type TenderCategoryValue } from "@/types/tender";
@@ -74,17 +75,15 @@ export function ManualTenderForm() {
 
   return (
     <AppLayout>
-      <Button component={RouterLink} to="/tenders" startIcon={<ArrowBackIcon />} sx={{ mb: 2 }}>
+      <Button component={RouterLink} to="/tenders" startIcon={<ArrowBackIcon />} sx={{ mb: 2 }} color="inherit">
         Back to tenders
       </Button>
 
-      <Typography variant="h5" fontWeight={600} mb={1}>
-        Add Tender Manually
-      </Typography>
-      <Typography variant="body2" color="text.secondary" mb={3}>
-        For tenders from a source without an automated connector yet — e.g. a document emailed to you, or a portal
-        page without a verified access path. This does not scrape or bypass any portal's access controls.
-      </Typography>
+      <PageHeader
+        eyebrow="Manual entry"
+        title="Add Tender Manually"
+        subtitle="For tenders from a source without an automated connector yet — e.g. a document emailed to you, or a portal page without a verified access path. This does not scrape or bypass any portal's access controls."
+      />
 
       <Paper variant="outlined" sx={{ p: 3 }} component="form" onSubmit={handleSubmit}>
         <Stack spacing={3}>

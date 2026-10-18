@@ -40,17 +40,23 @@ Conventions used throughout:
 | `tender_locations` | `id`, `tender_id` FK, `state`, `city`, `pincode` | A tender may span multiple delivery locations |
 | `tender_categories` | `id`, `tender_id` FK, `category` (enum: the 9 focus areas + other), `confidence` | `confidence` is null for directly-set categories (manual entry today); only the Sprint 4 intelligence engine populates it, keeping fact vs. interpretation visible on the row itself |
 | `tender_deadlines` | `id`, `tender_id` FK, `deadline_type` (`bid_submission`\|`pre_bid_meeting`\|`clarification`\|`extended`), `deadline_at`, `source_document_id` FK nullable | A corrigendum **adds** an `extended` row and updates `tenders.closing_date` + sets `tenders.status=corrigendum` — the original row is never overwritten, so the full history survives (tested: `test_changed_closing_date_adds_extended_deadline_and_marks_corrigendum`) |
-| `tender_documents` | `id`, `tender_id` FK, `file_name`, `document_type` (`nit`\|`rfp`\|`boq`\|`annexure`\|`corrigendum`\|`other`), `source_url`, `storage_path`, `checksum_sha256`, `file_size_bytes`, `ocr_status` (`not_required`\|`pending`\|`done`\|`failed`), `extraction_status` (`pending`\|`done`\|`failed`), `page_count`, `extracted_text` ✅ Sprint 3, `last_processing_error` ✅ Sprint 3 | `source_url` is populated at ingestion time (connector or manual entry), or `storage_path` directly for a manual file upload. `extracted_text`/`last_processing_error` added in migration `0004`; populated by `app/services/document_processing_service.py`. |
+| `tender_documents` | `id`, `tender_id` FK, `file_name`, `document_type` (`nit`\|`rfp`\|`boq`\|`annexure`\|`corrigendum`\|`other`), `source_url`, `storage_path`, `checksum_sha256`, `file_size_bytes`, `ocr_status` (`not_required`\|`pending`\|`done`\|`failed`), `extraction_status` (`pending`\|`done`\|`failed`), `page_count`, `extracted_text` ✅ Sprint 3, `extracted_pages` (jsonb, one string per page) ✅ Sprint 4, `last_processing_error` ✅ Sprint 3 | `source_url` is populated at ingestion time (connector or manual entry), or `storage_path` directly for a manual file upload. `extracted_text`/`last_processing_error` added in migration `0004`; populated by `app/services/document_processing_service.py`. |
 
 **A note on `json` vs `jsonb`:** every JSON column (`roles.permissions`, `audit_logs.details`, `tenders.raw_metadata`) uses `jsonb`, not plain `json` — enforced via `app/models/base.py::sa_json()`. Plain Postgres `json` has no equality operator, which silently breaks any query needing `SELECT DISTINCT` on a row containing that column (exactly what tender keyword search does). This was caught only when testing against a real Postgres database, not the SQLite-backed unit test suite — see `tests/integration/test_postgres_tender_search.py` for the regression test, and migration `0003_json_to_jsonb` for the fix applied to already-migrated databases.
 
-## 4. Document intelligence — facts (Sprint 3–4)
+## 4. Document intelligence — facts ✅ Sprint 4
 
 | Table | Key columns | Notes |
 |---|---|---|
-| `tender_requirements` | `id`, `tender_id` FK, `category` (`technical`\|`manpower`\|`sla`\|`security`\|`integration`), `requirement_text`, `document_id` FK, `page_number` | Verbatim extracted requirement + citation |
-| `tender_eligibility` | `id`, `tender_id` FK, `criterion_type` (`turnover`\|`net_worth`\|`emd`\|`tender_fee`\|`experience`\|`certification`\|`msme`\|`other`), `criterion_text` (verbatim clause), `extracted_value` (jsonb — e.g. `{"amount": 100000000, "period_years": 3}`), `document_id` FK, `page_number` | This is the **fact** table — no Stackerbee-relative judgement lives here |
-| `tender_embeddings` | `id`, `document_id` FK, `chunk_index`, `chunk_text`, `embedding` (`vector(1536)`, pgvector), `page_range` | Powers RAG retrieval; `EMBEDDING_DIMENSIONS` env-configurable |
+| `tender_requirements` | `id`, `tender_id` FK, `document_id` FK, `category` (`technology`\|`infrastructure`\|`integration`\|`support`\|`sla`\|`security`\|`certification`\|`manpower`\|`contract`\|`other`), `summary`, `requirement_text` (verbatim clause), `details` (jsonb — e.g. manpower `{"role", "resource_count", "min_experience_years"}`), `page_number` (1-indexed), `generated_by_model` | **Fact** table. A row is only inserted after `app/intelligence/extraction/citations.py` confirms `requirement_text` occurs on `page_number` of `document_id` |
+| `tender_eligibility` | `id`, `tender_id` FK, `document_id` FK, `criterion_type` (`turnover`\|`net_worth`\|`emd`\|`tender_fee`\|`performance_security`\|`similar_projects`\|`years_of_experience`\|`government_experience`\|`certification`\|`msme_startup`\|`other`), `summary`, `criterion_text` (verbatim clause), `extracted_value` (jsonb — e.g. `{"amount_inr": 100000000, "period_years": 3, "is_average": true}`, or `{"msme_clause_kind": "emd_exemption"}`), `page_number`, `generated_by_model` | **Fact** table — what the tender requires; no Stackerbee-relative judgement lives here. Same citation guarantee |
+| `tender_analysis` | `id`, `tender_id` FK (unique), `status` (`running`\|`done`\|`failed`), `summary` (jsonb: project, overview, duration, bullet sections, categories, `fact_refs`), `run_stats` (jsonb: per-document pages/calls/kept/dropped counts, tokens), `documents_analysed`, `generated_by_model`, `started_at`, `finished_at`, `error` | One row per tender, latest run. `summary` is **interpretation**, generated only from the verified fact rows; its bullets cite facts by id (`[R1]`, `[E2]`) mapped via `fact_refs` to row UUIDs |
+| `tender_embeddings` | `id`, `document_id` FK, `chunk_index`, `chunk_text`, `embedding` (`vector(1536)`, pgvector), `page_range` | 🔜 Sprint 7 — powers RAG retrieval; `EMBEDDING_DIMENSIONS` env-configurable |
+
+A re-run replaces a tender's fact rows and AI-assigned `tender_categories` rows
+(`confidence` not null) in one transaction with the new summary; manual categories
+(`confidence` null) are never touched. A failed run rolls back and leaves the previous
+facts in place.
 
 ## 5. Stackerbee profile (Sprint 5)
 
@@ -64,7 +70,6 @@ Conventions used throughout:
 
 | Table | Key columns | Notes |
 |---|---|---|
-| `tender_analysis` | `id`, `tender_id` FK, `summary_text`, `generated_by_model`, `generated_at` | The executive summary; always labelled AI-generated in the UI |
 | `qualification_results` | `id`, `tender_id` FK, `eligibility_status` (`ELIGIBLE`\|`NOT_ELIGIBLE`\|`UNCERTAIN`), `reasons` (jsonb array of `{text, polarity: support\|concern, evidence_ref}`), `relevance_score`, `relevance_factors` (jsonb: technical/eligibility/experience/manpower/commercial/location/msme/urgency, each 0–100 with evidence refs), `risks` (jsonb array of `{risk, severity, evidence, document_id, page}`), `computed_at` | **Interpretation** table — explicitly separate from `tender_eligibility` facts above; `relevance_score` is always reconstructable from `relevance_factors`, never stored as a bare number alone |
 
 ## 7. Opportunity CRM (Sprint 6)
@@ -113,3 +118,5 @@ their own migration — never hand-edited directly in a shared environment. So f
   repairs databases that already ran the original versions, and is a safe no-op if run twice.
 - `0004_document_extraction_fields` (Sprint 3) — adds `tender_documents.extracted_text` and
   `tender_documents.last_processing_error`.
+- `0005_tender_intelligence` (Sprint 4) — adds `tender_documents.extracted_pages`; creates
+  `tender_requirements`, `tender_eligibility`, `tender_analysis`.

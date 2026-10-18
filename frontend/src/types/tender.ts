@@ -104,6 +104,8 @@ export interface TenderListItem {
   closing_date: string | null;
   status: TenderStatus;
   source_id: string;
+  categories: Category[];
+  locations: Location[];
 }
 
 export interface TenderDetail extends TenderListItem {
@@ -112,8 +114,6 @@ export interface TenderDetail extends TenderListItem {
   tender_fee: string | null;
   source_tender_id: string | null;
   raw_metadata: Record<string, unknown>;
-  locations: Location[];
-  categories: Category[];
   deadlines: Deadline[];
   documents: TenderDocument[];
   created_at: string;
@@ -135,6 +135,9 @@ export interface TenderFilters {
   category?: TenderCategoryValue;
   min_value?: string;
   max_value?: string;
+  /** ISO datetime; only tenders closing at/after this instant. */
+  closing_after?: string;
+  closing_before?: string;
   status?: TenderStatus;
   page?: number;
   page_size?: number;

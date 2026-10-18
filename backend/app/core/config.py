@@ -38,6 +38,17 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
 
+    # --- Scheduled crawls (Celery Beat) ---
+    # Every crawler-enabled source is crawled once a day at this local time
+    # (`scheduler_timezone`), when GeM and the app are both quiet.
+    scheduled_crawl_enabled: bool = True
+    scheduled_crawl_hour: int = 1
+    scheduled_crawl_minute: int = 0
+    scheduler_timezone: str = "Asia/Kolkata"
+    # Upper bound on one all-sources run; the overlap lock expires after it
+    # so a crashed worker can't block tomorrow's crawl forever.
+    scheduled_crawl_lock_timeout_seconds: int = 4 * 60 * 60
+
     # --- Object storage ---
     # "minio" | "s3" (both via the S3 backend, just different endpoint/creds)
     # "local" (plain filesystem — for dev environments without a running
@@ -65,11 +76,27 @@ class Settings(BaseSettings):
     document_download_timeout_seconds: float = 60.0
 
     # --- LLM abstraction (Sprint 4+) ---
+    # "anthropic" | "openai" (any OpenAI-compatible endpoint via
+    # openai_base_url). See app/intelligence/llm/__init__.py.
     llm_provider: str = "anthropic"
     anthropic_api_key: str = ""
-    anthropic_model: str = "claude-sonnet-5"
+    anthropic_model: str = "claude-opus-5-5"
+    # low | medium | high | xhigh | max — extraction is a fairly mechanical
+    # read-and-quote task, so the model default (medium) is a sensible start.
+    anthropic_effort: str = "medium"
+    # Server-side refusal fallback (see anthropic_client.py). Supported on
+    # current models such as claude-opus-5-5; turn off if ANTHROPIC_MODEL
+    # is set to a model that rejects the `fallbacks` parameter.
+    anthropic_refusal_fallback: bool = True
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
+    openai_base_url: str = "https://api.openai.com/v1"
+    llm_request_timeout_seconds: float = 300.0
+    llm_max_output_tokens: int = 16000
+    # Upper bound on document text sent in a single extraction call. Pages
+    # are batched up to this size (never split mid-page, unless one page
+    # alone exceeds it), so a large tender is never sent to the LLM whole.
+    llm_max_chars_per_call: int = 24000
 
     # --- Crawler / connector behaviour (Sprint 2+) ---
     crawler_default_rate_limit_seconds: float = 2.0
@@ -87,6 +114,9 @@ class Settings(BaseSettings):
     gem_bidplus_base_url: str = "https://bidplus.gem.gov.in"
     gem_pages_per_keyword: int = 2
     gem_request_timeout_seconds: float = 30.0
+    # Fetch each bid's PDF during the crawl to read the consignee (delivery)
+    # pincode/city -> state. GeM's listing payload has no location field.
+    gem_extract_consignee_locations: bool = True
 
     # --- Notifications (Sprint 6+) ---
     notifications_email_enabled: bool = True

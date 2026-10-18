@@ -14,6 +14,7 @@ RUN apt-get update \
         libmagic1 \
         tesseract-ocr \
         poppler-utils \
+        tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

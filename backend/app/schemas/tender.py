@@ -114,6 +114,8 @@ class TenderListItem(BaseModel):
     closing_date: datetime | None
     status: TenderStatus
     source_id: uuid.UUID
+    categories: list[CategoryRead]
+    locations: list[LocationRead]
 
 
 class TenderDetail(TenderListItem):
@@ -122,8 +124,6 @@ class TenderDetail(TenderListItem):
     tender_fee: Decimal | None
     source_tender_id: str | None
     raw_metadata: dict
-    locations: list[LocationRead]
-    categories: list[CategoryRead]
     deadlines: list[DeadlineRead]
     documents: list[DocumentRead]
     created_at: datetime

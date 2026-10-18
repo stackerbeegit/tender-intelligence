@@ -43,6 +43,17 @@ class FileTooLargeError(DomainError):
     """Exceeds settings.max_document_size_bytes."""
 
 
+class LLMNotConfiguredError(DomainError):
+    """LLM_PROVIDER names an unknown provider, or the selected provider
+    has no API key set."""
+
+
+class LLMResponseError(DomainError):
+    """The provider call failed (network/API error, refusal, truncated or
+    non-JSON output). Vendor SDK exceptions are translated into this one
+    type inside each adapter so callers never import a vendor SDK."""
+
+
 class OcrUnavailableError(DomainError):
     """The tesseract binary (or poppler, for PDF-to-image rendering)
     isn't installed/reachable. Raised rather than letting pytesseract's

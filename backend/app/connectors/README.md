@@ -20,6 +20,15 @@ confirmed is in place for this integration (recorded on the live `sources` row's
 `terms_access_notes`, and in `docs/development-plan.md`'s Sprint 2 progress log).
 `gem/parser.py` unwraps GeM's Solr-style list-wrapped response fields.
 
+**State / location:** the listing payload has no location, so the connector fetches each
+bid's PDF (one GET per bid, inside the runner's rate limit; toggle with
+`GEM_EXTRACT_CONSIGNEE_LOCATIONS`) and `gem/location.py` reads the consignee table —
+pincode for civil bids, masked-address city for defence bids — mapping it to a state via
+`gem/locations.json`. Buyer state comes from state-government department names
+("… Department Gujarat"). BOQ bids and RA bids (empty PDF) get no delivery location.
+Rebuild `locations.json` from GeM's own state/city lists with
+`python scripts/build_gem_locations.py`.
+
 ## No other portal-specific connector is implemented yet
 
 CPPP/eProcure's Copyright Policy has the same "permission required to reproduce"
