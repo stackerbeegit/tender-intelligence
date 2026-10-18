@@ -16,6 +16,31 @@ Docker Compose and is reachable only from the team's network. Everything below u
 Only `web` publishes a port. Postgres and Redis are reachable inside the Docker
 network only.
 
+## Quick start: `deploy.sh`
+
+[`deploy.sh`](../deploy.sh) does steps 4–7 for you. On the server:
+
+```bash
+git clone https://github.com/stackerbeegit/tender-intelligence.git /opt/tender-intelligence
+cd /opt/tender-intelligence
+./deploy.sh                    # or, to bring laptop data along:
+./deploy.sh --restore-db local-db.dump --restore-docs local-documents.tar.gz
+```
+
+On first run it:
+- installs Docker if it's missing
+- creates `.env` with freshly generated secrets, asking for the Anthropic key and the
+  listen address (it defaults to the Tailscale IP when Tailscale is installed)
+- builds and starts the stack, and waits until it's healthy
+- creates the GeM source
+- installs the 03:30 backup cron job
+
+Run it again after every `git push` to deploy the update. Other commands:
+`./deploy.sh status`, `./deploy.sh logs worker`, `./deploy.sh crawl` (fill the
+database now), `./deploy.sh backup`.
+
+The sections below describe the same steps by hand.
+
 ## 1. What you need
 
 - A Linux server (Ubuntu 22.04/24.04), **2 vCPU / 4 GB RAM / 40 GB disk**, switched on
