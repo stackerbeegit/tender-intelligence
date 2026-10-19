@@ -1,0 +1,18 @@
+# HTTPS front door (docker-compose.prod.yml, profile "https").
+# Caddy fetches and renews a Let's Encrypt certificate for $DOMAIN on its own,
+# redirects HTTP -> HTTPS, and forwards everything to the nginx `web` container.
+# Needs: a DNS A record for $DOMAIN pointing at this server, and ports 80 + 443
+# open to the internet (Let's Encrypt validates over port 80).
+
+{$DOMAIN} {
+	encode gzip
+
+	header Strict-Transport-Security "max-age=31536000"
+
+	reverse_proxy web:80 {
+		# AI analysis calls can take minutes (matches nginx proxy_read_timeout).
+		transport http {
+			response_header_timeout 330s
+		}
+	}
+}

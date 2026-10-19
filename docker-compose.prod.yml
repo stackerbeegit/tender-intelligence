@@ -134,7 +134,28 @@ services:
       backend:
         condition: service_healthy
 
+  # HTTPS for a public domain. Enabled with COMPOSE_PROFILES=https and DOMAIN
+  # in .env; then set WEB_BIND=127.0.0.1:8080 so `web` doesn't take port 80.
+  caddy:
+    image: caddy:2.8-alpine
+    profiles: ["https"]
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:-}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./infrastructure/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data        # certificates — keep this volume
+      - caddy_config:/config
+    depends_on:
+      - web
+
 volumes:
   pgdata:
   redisdata:
   documents:
+  caddy_data:
+  caddy_config:

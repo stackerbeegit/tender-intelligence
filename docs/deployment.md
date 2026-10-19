@@ -132,6 +132,21 @@ return `{"status":"ok"}`.
 at `https://<server-name>.<tailnet>.ts.net` with an automatic certificate. If you do,
 set `WEB_BIND=127.0.0.1:80`.
 
+**Optional: HTTPS on a public domain** (e.g. `sales.stackerbee.com`). A Caddy
+container gets a Let's Encrypt certificate and renews it automatically.
+
+1. Add a DNS **A record** for the domain pointing at the server's public IP.
+2. Open ports 80 and 443 in the cloud firewall / security group (`sudo ufw allow 80,443/tcp`).
+3. In `.env`:
+   ```bash
+   COMPOSE_PROFILES=https
+   DOMAIN=sales.stackerbee.com
+   WEB_BIND=127.0.0.1:8080
+   ```
+4. `./deploy.sh`, then check `$DC logs caddy` for `certificate obtained successfully`.
+
+This makes the app reachable from the whole internet, not only the team's network.
+
 ## 7. Backups
 
 ```bash

@@ -164,7 +164,11 @@ deploy() {
   local bind; bind="$(env_value WEB_BIND)"; bind="${bind:-80}"
   local host="${bind%:*}"; [[ "$host" == "$bind" || "$host" == "0.0.0.0" ]] && host="$(hostname -I | awk '{print $1}')"
   echo
-  info "Deployed. Open: http://$host/"
+  if [[ "$(env_value COMPOSE_PROFILES)" == *https* && -n "$(env_value DOMAIN)" ]]; then
+    info "Deployed. Open: https://$(env_value DOMAIN)/"
+  else
+    info "Deployed. Open: http://$host/"
+  fi
   info "The GeM crawl runs nightly at $(env_value SCHEDULED_CRAWL_HOUR):$(printf '%02d' "$(env_value SCHEDULED_CRAWL_MINUTE)") $(env_value SCHEDULER_TIMEZONE)."
   info "To fill the database now:   ./deploy.sh crawl"
   [[ -n "$db_dump" ]] || info "First admin user:  docker compose -f $COMPOSE_FILE exec backend python -m app.scripts.create_admin --email ... --password ... --name ..."
