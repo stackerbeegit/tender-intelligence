@@ -85,12 +85,21 @@ class GemConnector(BaseConnector):
         self._fetch_bid_pdfs = (
             fetch_bid_pdfs if fetch_bid_pdfs is not None else settings.gem_extract_consignee_locations
         )
+        # self._client = httpx.Client(
+        #     base_url=settings.gem_bidplus_base_url,
+        #     headers={"User-Agent": settings.crawler_user_agent},
+        #     timeout=settings.gem_request_timeout_seconds,
+        #     follow_redirects=True,
+        # )
+
         self._client = httpx.Client(
             base_url=settings.gem_bidplus_base_url,
             headers={"User-Agent": settings.crawler_user_agent},
             timeout=settings.gem_request_timeout_seconds,
             follow_redirects=True,
+            verify="/etc/ssl/certs/ca-certificates.crt",
         )
+
 
     def _get_csrf_token(self) -> str:
         response = self._client.get("/all-bids")
