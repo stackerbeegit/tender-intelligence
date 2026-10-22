@@ -35,6 +35,7 @@ from app.models.tender_category import TenderCategory
 from app.models.tender_document import TenderDocument
 from app.models.tender_eligibility import TenderEligibility
 from app.models.tender_requirement import TenderRequirement
+from app.models.tender_submission_document import TenderSubmissionDocument
 from app.services import document_processing_service
 
 logger = get_logger(__name__)
@@ -130,6 +131,7 @@ def _replace_facts(
 ) -> tuple[list[TenderRequirement], list[TenderEligibility]]:
     db.execute(delete(TenderRequirement).where(TenderRequirement.tender_id == tender_id))
     db.execute(delete(TenderEligibility).where(TenderEligibility.tender_id == tender_id))
+    db.execute(delete(TenderSubmissionDocument).where(TenderSubmissionDocument.tender_id == tender_id))
 
     requirements: list[TenderRequirement] = []
     eligibility: list[TenderEligibility] = []
@@ -160,6 +162,21 @@ def _replace_facts(
                     generated_by_model=model_name,
                 )
             )
+        db.add_all(
+            TenderSubmissionDocument(
+                tender_id=tender_id,
+                document_id=document.id,
+                kind=item.kind,
+                document_name=item.document_name,
+                mandatory=item.mandatory,
+                format_instructions=item.format_instructions,
+                form_reference=item.form_reference,
+                clause_text=item.quote,
+                page_number=item.page_number,
+                generated_by_model=model_name,
+            )
+            for item in extraction.submission_documents
+        )
     db.add_all(requirements + eligibility)
     db.flush()  # assigns ids, which the summary's fact_refs point at
     return requirements, eligibility
@@ -200,6 +217,7 @@ def _run_stats(
             "llm_calls": e.llm_calls,
             "requirements": len(e.requirements),
             "eligibility": len(e.eligibility),
+            "submission_documents": len(e.submission_documents),
             "dropped_unverified": e.dropped_unverified,
             "dropped_duplicates": e.dropped_duplicates,
             "dropped_examples": e.dropped_examples,

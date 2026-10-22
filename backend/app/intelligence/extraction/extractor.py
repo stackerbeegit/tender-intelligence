@@ -16,10 +16,11 @@ from app.intelligence.extraction.schemas import (
     EXTRACTION_SCHEMA,
     ExtractedEligibility,
     ExtractedRequirement,
+    ExtractedSubmissionDocument,
     drop_nulls,
 )
 from app.intelligence.llm.base import LLMClient
-from app.models.enums import EligibilityCriterionType, RequirementCategory
+from app.models.enums import EligibilityCriterionType, RequirementCategory, SubmissionDocumentKind
 
 logger = get_logger(__name__)
 
@@ -28,6 +29,7 @@ logger = get_logger(__name__)
 class DocumentExtraction:
     requirements: list[ExtractedRequirement] = field(default_factory=list)
     eligibility: list[ExtractedEligibility] = field(default_factory=list)
+    submission_documents: list[ExtractedSubmissionDocument] = field(default_factory=list)
     llm_calls: int = 0
     pages_read: int = 0
     dropped_unverified: int = 0
@@ -133,15 +135,39 @@ def extract_document(
                 )
             )
 
+        for item in response.data.get("submission_documents", []):
+            if not _verified(item, pages, result, kind="submission_document"):
+                continue
+            if _is_duplicate(seen, "submission_document", item, result):
+                continue
+            result.submission_documents.append(
+                ExtractedSubmissionDocument(
+                    document_id=document_id,
+                    kind=SubmissionDocumentKind(item["kind"]),
+                    document_name=item["document_name"].strip()[:500],
+                    quote=item["quote"].strip(),
+                    page_number=item["page_number"],
+                    mandatory=item.get("mandatory"),
+                    format_instructions=_clean(item.get("format_instructions")),
+                    form_reference=_clean(item.get("form_reference")),
+                )
+            )
+
     logger.info(
-        "Extracted document=%s calls=%d requirements=%d eligibility=%d dropped_unverified=%d",
+        "Extracted document=%s calls=%d requirements=%d eligibility=%d submission_documents=%d dropped_unverified=%d",
         document_id,
         result.llm_calls,
         len(result.requirements),
         len(result.eligibility),
+        len(result.submission_documents),
         result.dropped_unverified,
     )
     return result
+
+
+def _clean(value: str | None) -> str | None:
+    value = (value or "").strip()
+    return value[:500] or None
 
 
 def _verified(item: dict, pages: list[str], result: DocumentExtraction, *, kind: str) -> bool:

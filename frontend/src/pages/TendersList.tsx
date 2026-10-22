@@ -47,6 +47,12 @@ function tenderStates(tender: TenderListItem): { label: string; isBuyer: boolean
   return tender.organisation?.state ? [{ label: tender.organisation.state, isBuyer: true }] : [];
 }
 
+const FIT_LABELS = {
+  ELIGIBLE: { label: "Eligible", color: "success" },
+  NOT_ELIGIBLE: { label: "Not eligible", color: "error" },
+  UNCERTAIN: { label: "Uncertain", color: "warning" },
+} as const;
+
 function isCategory(value: string | null): value is TenderCategoryValue {
   return value !== null && value in TENDER_CATEGORY_LABELS;
 }
@@ -63,6 +69,7 @@ export function TendersList() {
   const [status, setStatus] = useState<string>("");
   const [state, setState] = useState<string>(searchParams.get("state") ?? "");
   const [liveOnly, setLiveOnly] = useState(true);
+  const [sort, setSort] = useState<"closing" | "relevance">(searchParams.get("sort") === "relevance" ? "relevance" : "closing");
   const [states, setStates] = useState<string[]>([]);
   const pageSize = 15;
   // Fixed per mount so paging doesn't shift the "live" cut-off under the user.
@@ -79,12 +86,13 @@ export function TendersList() {
     if (status) filters.status = status as TenderFilters["status"];
     if (state) filters.state = state;
     if (liveOnly) filters.closing_after = now;
+    if (sort === "relevance") filters.sort = "relevance";
 
     tenderService.list(filters).then((res) => {
       setItems(res.items);
       setTotal(res.total);
     });
-  }, [page, keyword, category, status, state, liveOnly, now]);
+  }, [page, keyword, category, status, state, liveOnly, sort, now]);
 
   const syncParams = (next: { category?: string; state?: string }) => {
     const params: Record<string, string> = {};
@@ -98,7 +106,7 @@ export function TendersList() {
   const hasFilters = Boolean(keyword || category || status || state);
   // GeM publishes no bid value, so a column of dashes is just noise.
   const showValue = Boolean(items?.some((t) => t.tender_value));
-  const columnCount = showValue ? 7 : 6;
+  const columnCount = showValue ? 8 : 7;
 
   return (
     <AppLayout>
@@ -191,6 +199,20 @@ export function TendersList() {
             <MenuItem value="cancelled">Cancelled</MenuItem>
             <MenuItem value="corrigendum">Corrigendum</MenuItem>
           </TextField>
+          <TextField
+            label="Sort by"
+            select
+            value={sort}
+            onChange={(e) => {
+              setPage(1);
+              setSort(e.target.value as "closing" | "relevance");
+            }}
+            sx={{ minWidth: 170 }}
+            size="small"
+          >
+            <MenuItem value="closing">Closing soonest</MenuItem>
+            <MenuItem value="relevance">Most relevant</MenuItem>
+          </TextField>
           <FormControlLabel
             control={
               <Switch
@@ -213,6 +235,7 @@ export function TendersList() {
           <TableHead>
             <TableRow>
               <TableCell>Tender</TableCell>
+              <TableCell title="Rule-based relevance score and eligibility from the company profile">Fit</TableCell>
               <TableCell>Category</TableCell>
               <TableCell>Organisation</TableCell>
               <TableCell>State</TableCell>
@@ -256,6 +279,32 @@ export function TendersList() {
                   {tender.tender_number && (
                     <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "monospace" }}>
                       {tender.tender_number}
+                    </Typography>
+                  )}
+                  {tender.opportunity && (
+                    <Chip size="small" color="secondary" variant="outlined" label="In pipeline" sx={{ ml: 1, height: 20 }} />
+                  )}
+                </TableCell>
+                <TableCell sx={{ whiteSpace: "nowrap" }}>
+                  {tender.qualification ? (
+                    <Stack spacing={0.25} alignItems="flex-start">
+                      <Typography variant="body2" fontWeight={700}>
+                        {tender.qualification.relevance_score}
+                        <Typography component="span" variant="caption" color="text.secondary">
+                          /100
+                        </Typography>
+                      </Typography>
+                      <Chip
+                        size="small"
+                        label={FIT_LABELS[tender.qualification.eligibility_status].label}
+                        color={FIT_LABELS[tender.qualification.eligibility_status].color}
+                        variant="outlined"
+                        sx={{ height: 20 }}
+                      />
+                    </Stack>
+                  ) : (
+                    <Typography variant="body2" color="text.disabled" title="Not assessed yet">
+                      —
                     </Typography>
                   )}
                 </TableCell>

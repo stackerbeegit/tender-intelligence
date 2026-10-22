@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.enums import AnalysisStatus, EligibilityCriterionType, RequirementCategory
+from app.models.enums import AnalysisStatus, EligibilityCriterionType, RequirementCategory, SubmissionDocumentKind
 
 
 class CitationRead(BaseModel):
@@ -38,6 +38,21 @@ class EligibilityRead(BaseModel):
     generated_by_model: str
 
 
+class SubmissionDocumentRead(BaseModel):
+    """FACT: a document the tender says must be submitted; `clause_text` is
+    the verified verbatim clause."""
+
+    id: uuid.UUID
+    kind: SubmissionDocumentKind
+    document_name: str
+    mandatory: bool | None
+    format_instructions: str | None
+    form_reference: str | None
+    clause_text: str
+    citation: CitationRead
+    generated_by_model: str
+
+
 class AnalysisRunRead(BaseModel):
     """`summary` is AI INTERPRETATION written from the facts above;
     clients must label it as AI-generated."""
@@ -59,3 +74,4 @@ class TenderAnalysisResponse(BaseModel):
     analysis: AnalysisRunRead | None
     requirements: list[RequirementRead]
     eligibility: list[EligibilityRead]
+    submission_documents: list[SubmissionDocumentRead]

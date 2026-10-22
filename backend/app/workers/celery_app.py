@@ -29,13 +29,14 @@ celery_app.conf.update(
     result_expires=7 * 24 * 60 * 60,
 )
 
-celery_app.conf.beat_schedule = (
-    {
-        "daily-crawl-all-sources": {
-            "task": "app.workers.tasks.crawl_all_sources",
-            "schedule": crontab(hour=settings.scheduled_crawl_hour, minute=settings.scheduled_crawl_minute),
-        }
+celery_app.conf.beat_schedule = {}
+if settings.scheduled_crawl_enabled:
+    celery_app.conf.beat_schedule["daily-crawl-all-sources"] = {
+        "task": "app.workers.tasks.crawl_all_sources",
+        "schedule": crontab(hour=settings.scheduled_crawl_hour, minute=settings.scheduled_crawl_minute),
     }
-    if settings.scheduled_crawl_enabled
-    else {}
-)
+if settings.digest_enabled:
+    celery_app.conf.beat_schedule["daily-digest"] = {
+        "task": "app.workers.tasks.send_daily_digest",
+        "schedule": crontab(hour=settings.digest_hour, minute=settings.digest_minute),
+    }

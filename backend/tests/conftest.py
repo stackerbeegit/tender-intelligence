@@ -120,3 +120,20 @@ def client(db_session: Session) -> TestClient:
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+class MemoryEmailSender:
+    """Captures e-mails instead of sending them."""
+
+    def __init__(self):
+        self.sent = []
+
+    def send(self, message):
+        self.sent.append(message)
+
+
+@pytest.fixture()
+def outbox(monkeypatch) -> MemoryEmailSender:
+    sender = MemoryEmailSender()
+    monkeypatch.setattr("app.notifications.email.get_email_sender", lambda settings=None: sender)
+    return sender

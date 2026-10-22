@@ -9,7 +9,7 @@ from app.api.deps import get_current_user, require_roles
 from app.core.database import get_db
 from app.core.exceptions import DomainError
 from app.models.enums import TenderCategory as TenderCategoryEnum
-from app.models.enums import TenderStatus
+from app.models.enums import EligibilityStatus, TenderStatus
 from app.models.user import User
 from app.repositories.tender_repository import TenderFilter, TenderRepository
 from app.schemas.tender import ManualTenderCreate, TenderDetail, TenderListResponse
@@ -32,6 +32,9 @@ def list_tenders(
     closing_after: datetime | None = Query(default=None),
     closing_before: datetime | None = Query(default=None),
     status_filter: TenderStatus | None = Query(default=None, alias="status"),
+    eligibility: EligibilityStatus | None = Query(default=None),
+    min_relevance: int | None = Query(default=None, ge=0, le=100),
+    sort: str = Query(default="closing", pattern="^(closing|relevance)$"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
 ) -> TenderListResponse:
@@ -46,6 +49,9 @@ def list_tenders(
         closing_after=closing_after,
         closing_before=closing_before,
         status=status_filter,
+        eligibility=eligibility,
+        min_relevance=min_relevance,
+        sort=sort,
         page=page,
         page_size=page_size,
     )

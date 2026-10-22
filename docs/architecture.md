@@ -182,6 +182,13 @@ A relevant tender is promoted to an `opportunity` with its own status machine
 (`NEW → SCREENING → QUALIFIED → MANAGEMENT_REVIEW → BID_NO_BID → PROPOSAL_IN_PROGRESS →
 SUBMITTED → TECHNICAL_EVALUATION → COMMERCIAL_EVALUATION → WON/LOST`), assignment to a
 team/owner, notes, tasks, and a full status-change history for audit purposes.
+Leaving `BID_NO_BID` is restricted to BD managers and admins; `NO_BID`/`LOST` need a reason;
+transitions are enforced in `app/services/opportunity_service.py` (Sprint 6).
+
+Bid preparation (Sprint 6) produces a submission checklist from the tender's cited
+"documents to be submitted" clauses and an AI **draft** bid that a deterministic check
+rejects if it states any amount, certification or year count not present in the verified
+facts or the company profile. It prepares; people review, complete and submit (§9).
 
 ## 11. Security model (summary — see §20 of the product brief for full requirements)
 

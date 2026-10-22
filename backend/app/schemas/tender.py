@@ -7,6 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.models.enums import (
     DeadlineType,
     DocumentType,
+    EligibilityStatus,
+    OpportunityStatus,
     OrganisationType,
     TenderCategory as TenderCategoryEnum,
     TenderStatus,
@@ -102,6 +104,23 @@ class DocumentRead(BaseModel):
     last_processing_error: str | None
 
 
+class QualificationBrief(BaseModel):
+    """Rule-based assessment (see GET /tenders/{id}/qualification for the
+    evidence behind it)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    eligibility_status: EligibilityStatus
+    relevance_score: int
+
+
+class OpportunityBrief(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    status: OpportunityStatus
+
+
 class TenderListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -116,6 +135,8 @@ class TenderListItem(BaseModel):
     source_id: uuid.UUID
     categories: list[CategoryRead]
     locations: list[LocationRead]
+    qualification: QualificationBrief | None = None
+    opportunity: OpportunityBrief | None = None
 
 
 class TenderDetail(TenderListItem):

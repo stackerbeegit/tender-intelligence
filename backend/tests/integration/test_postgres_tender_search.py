@@ -91,3 +91,48 @@ def test_keyword_search_does_not_error_on_distinct_with_json_columns(pg_session)
 
     assert total == 1
     assert items[0].title == "Integration test keyword distinctness"
+
+
+def test_relevance_sort_with_category_filter_runs_on_postgres(pg_session):
+    """Sprint 6: ordering by the relevance subquery. Postgres rejects that
+    combined with SELECT DISTINCT, which is why the category filter is an
+    EXISTS rather than a join — this pins that down on the real database."""
+    from datetime import datetime, timezone
+
+    from app.models.enums import EligibilityStatus
+    from app.models.enums import TenderCategory as TenderCategoryEnum
+    from app.models.qualification_result import QualificationResult
+    from app.models.tender import Tender
+    from app.models.tender_category import TenderCategory
+
+    source = Source(name=f"PG Sort Source {uuid.uuid4().hex[:8]}", source_type=SourceType.OTHER, status=SourceStatus.DISABLED)
+    pg_session.add(source)
+    pg_session.flush()
+    marker = uuid.uuid4().hex[:8]
+    for title, score in (("low", 10), ("high", 95), ("none", None)):
+        tender = Tender(source_id=source.id, fingerprint_hash=uuid.uuid4().hex, title=f"pgsort-{marker}-{title}")
+        pg_session.add(tender)
+        pg_session.flush()
+        # Two categories, so a join would have returned each tender twice.
+        pg_session.add_all(
+            [
+                TenderCategory(tender_id=tender.id, category=TenderCategoryEnum.SOFTWARE_DEVELOPMENT),
+                TenderCategory(tender_id=tender.id, category=TenderCategoryEnum.CLOUD_DEVOPS, confidence=0.9),
+            ]
+        )
+        if score is not None:
+            pg_session.add(
+                QualificationResult(
+                    tender_id=tender.id, eligibility_status=EligibilityStatus.UNCERTAIN, relevance_score=score,
+                    relevance_factors={}, reasons=[], risks=[], engine_version="1.0",
+                    computed_at=datetime.now(timezone.utc),
+                )
+            )
+    pg_session.flush()
+
+    items, total = TenderRepository(pg_session).search(
+        TenderFilter(keyword=f"pgsort-{marker}", category=TenderCategoryEnum.SOFTWARE_DEVELOPMENT, sort="relevance")
+    )
+
+    assert total == 3
+    assert [t.title.rsplit("-", 1)[1] for t in items] == ["high", "low", "none"]

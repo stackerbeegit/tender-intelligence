@@ -13,6 +13,7 @@ from app.schemas.analysis import (
     CitationRead,
     EligibilityRead,
     RequirementRead,
+    SubmissionDocumentRead,
     TenderAnalysisResponse,
 )
 from app.models.enums import AnalysisStatus
@@ -59,6 +60,22 @@ def _build_response(tender: Tender) -> TenderAnalysisResponse:
                 generated_by_model=row.generated_by_model,
             )
             for row in tender.eligibility_criteria
+        ],
+        submission_documents=[
+            SubmissionDocumentRead(
+                id=row.id,
+                kind=row.kind,
+                document_name=row.document_name,
+                mandatory=row.mandatory,
+                format_instructions=row.format_instructions,
+                form_reference=row.form_reference,
+                clause_text=row.clause_text,
+                citation=CitationRead(
+                    document_id=row.document_id, file_name=row.document.file_name, page_number=row.page_number
+                ),
+                generated_by_model=row.generated_by_model,
+            )
+            for row in tender.submission_documents
         ],
     )
 

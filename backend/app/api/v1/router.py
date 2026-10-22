@@ -3,9 +3,12 @@ from fastapi import APIRouter
 from app.api.v1 import (
     analysis,
     auth,
+    bid_preparation,
     dashboard,
     documents,
     health,
+    notifications,
+    opportunities,
     profile,
     qualification,
     sources,
@@ -24,5 +27,7 @@ api_router.include_router(documents.router)
 api_router.include_router(analysis.router)
 api_router.include_router(profile.router)
 api_router.include_router(qualification.router)
+api_router.include_router(opportunities.router)
+api_router.include_router(bid_preparation.router)
+api_router.include_router(notifications.router)
 
-# Sprint 6+: opportunities, notifications

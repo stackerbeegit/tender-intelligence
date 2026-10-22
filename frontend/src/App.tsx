@@ -6,6 +6,8 @@ import { CompanyProfile } from "@/pages/CompanyProfile";
 import { Dashboard } from "@/pages/Dashboard";
 import { Login } from "@/pages/Login";
 import { ManualTenderForm } from "@/pages/ManualTenderForm";
+import { OpportunitiesList } from "@/pages/OpportunitiesList";
+import { OpportunityDetail } from "@/pages/OpportunityDetail";
 import { SourcesAdmin } from "@/pages/SourcesAdmin";
 import { TenderDetail } from "@/pages/TenderDetail";
 import { TendersList } from "@/pages/TendersList";
@@ -53,6 +55,22 @@ export function App() {
             element={
               <ProtectedRoute>
                 <SourcesAdmin />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/opportunities"
+            element={
+              <ProtectedRoute>
+                <OpportunitiesList />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/opportunities/:id"
+            element={
+              <ProtectedRoute>
+                <OpportunityDetail />
               </ProtectedRoute>
             }
           />

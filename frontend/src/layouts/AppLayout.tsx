@@ -1,5 +1,6 @@
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
+import ViewKanbanOutlinedIcon from "@mui/icons-material/ViewKanbanOutlined";
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
@@ -31,6 +32,7 @@ const SIDEBAR_WIDTH = 248;
 const NAV_LINKS: { to: string; label: string; icon: ReactNode; roles?: string[]; exact?: boolean }[] = [
   { to: "/", label: "Dashboard", icon: <DashboardOutlinedIcon />, exact: true },
   { to: "/tenders", label: "Tenders", icon: <DescriptionOutlinedIcon /> },
+  { to: "/opportunities", label: "Opportunities", icon: <ViewKanbanOutlinedIcon /> },
   { to: "/tenders/new", label: "Add Tender", icon: <AddCircleOutlineIcon />, exact: true },
   { to: "/profile", label: "Company Profile", icon: <BusinessOutlinedIcon /> },
   { to: "/sources", label: "Sources", icon: <HubOutlinedIcon />, roles: ["admin", "technical"] },

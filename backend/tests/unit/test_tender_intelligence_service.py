@@ -1,6 +1,6 @@
 """
 End-to-end through the intelligence service: the representative RFP
-(tests/fixtures/documents/sample_rfp.pdf, a real 3-page PDF) is uploaded
+(tests/fixtures/documents/sample_rfp.pdf, a real 4-page PDF) is uploaded
 and processed by the real Sprint 3 pipeline, then analysed with the
 scripted FakeLLMClient. Stored facts must match
 tests/fixtures/intelligence/sample_rfp_expected.json exactly (Sprint 4
@@ -19,6 +19,7 @@ from app.models.tender_category import TenderCategory
 from app.models.tender_document import TenderDocument
 from app.models.tender_eligibility import TenderEligibility
 from app.models.tender_requirement import TenderRequirement
+from app.models.tender_submission_document import TenderSubmissionDocument
 from app.services import document_processing_service, tender_intelligence_service
 from tests.support.fake_llm import FakeLLMClient
 
@@ -46,9 +47,10 @@ def _sort_key(fact: dict) -> tuple:
 
 def test_processing_now_keeps_per_page_text(db_session, sample_tender, storage_backend):
     document = _upload_rfp(db_session, sample_tender)
-    assert document.page_count == 3
-    assert len(document.extracted_pages) == 3
+    assert document.page_count == 4
+    assert len(document.extracted_pages) == 4
     assert document.extracted_pages[2].startswith("Section 5: Pre-Qualification Criteria")
+    assert document.extracted_pages[3].startswith("Section 6: Documents to be Submitted")
 
 
 def test_sample_rfp_produces_expected_structured_facts(db_session, sample_tender, storage_backend):
@@ -85,6 +87,24 @@ def test_sample_rfp_produces_expected_structured_facts(db_session, sample_tender
     )
     assert actual_requirements == sorted(EXPECTED["requirements"], key=_sort_key)
     assert actual_eligibility == sorted(EXPECTED["eligibility"], key=_sort_key)
+    submission_documents = db_session.query(TenderSubmissionDocument).filter_by(tender_id=sample_tender.id).all()
+    actual_submission = sorted(
+        (
+            {
+                "kind": d.kind.value,
+                "document_name": d.document_name,
+                "page_number": d.page_number,
+                "clause_text": d.clause_text,
+                "mandatory": d.mandatory,
+                "format_instructions": d.format_instructions,
+                "form_reference": d.form_reference,
+            }
+            for d in submission_documents
+        ),
+        key=lambda d: d["clause_text"],
+    )
+    assert actual_submission == sorted(EXPECTED["submission_documents"], key=lambda d: d["clause_text"])
+    assert "CMMI" not in " ".join(d.clause_text for d in submission_documents)  # invented item dropped
     assert analysis.run_stats["dropped_unverified"] == EXPECTED["dropped_unverified"]
     assert analysis.run_stats["documents"][0]["dropped_duplicates"] == EXPECTED["dropped_duplicates"]
 
@@ -94,8 +114,13 @@ def test_every_stored_fact_cites_a_page_that_contains_its_quote(db_session, samp
     tender_intelligence_service.analyse_tender(db_session, sample_tender, llm=FakeLLMClient())
 
     requirements, eligibility = _facts(db_session, sample_tender.id)
-    assert requirements and eligibility
-    for fact, quote in [*((r, r.requirement_text) for r in requirements), *((e, e.criterion_text) for e in eligibility)]:
+    submission_documents = db_session.query(TenderSubmissionDocument).filter_by(tender_id=sample_tender.id).all()
+    assert requirements and eligibility and submission_documents
+    for fact, quote in [
+        *((r, r.requirement_text) for r in requirements),
+        *((e, e.criterion_text) for e in eligibility),
+        *((d, d.clause_text) for d in submission_documents),
+    ]:
         assert fact.document_id == document.id
         assert 1 <= fact.page_number <= document.page_count
         assert quote_on_page(quote, document.extracted_pages[fact.page_number - 1])
@@ -196,7 +221,7 @@ def test_document_processed_before_page_split_is_reprocessed(db_session, sample_
 
     assert analysis.status == AnalysisStatus.DONE
     db_session.refresh(document)
-    assert len(document.extracted_pages) == 3
+    assert len(document.extracted_pages) == 4
 
 
 def test_unconfigured_provider_fails_run_with_configuration_message(

@@ -9,7 +9,7 @@ no numeric/string-length constraints.
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.models.enums import EligibilityCriterionType, RequirementCategory, TenderCategory
+from app.models.enums import EligibilityCriterionType, RequirementCategory, SubmissionDocumentKind, TenderCategory
 
 MSME_CLAUSE_KINDS = [
     "msme_exemption",
@@ -86,6 +86,20 @@ EXTRACTION_SCHEMA: dict[str, Any] = _object(
                 }
             ),
         },
+        "submission_documents": {
+            "type": "array",
+            "items": _object(
+                {
+                    "kind": {"type": "string", "enum": [k.value for k in SubmissionDocumentKind]},
+                    "document_name": {"type": "string"},
+                    "mandatory": _nullable("boolean"),
+                    "format_instructions": _nullable("string"),
+                    "form_reference": _nullable("string"),
+                    "quote": {"type": "string"},
+                    "page_number": {"type": "integer"},
+                }
+            ),
+        },
     }
 )
 
@@ -130,6 +144,18 @@ class ExtractedEligibility:
     quote: str
     page_number: int  # 1-indexed
     value: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ExtractedSubmissionDocument:
+    document_id: str
+    kind: SubmissionDocumentKind
+    document_name: str
+    quote: str
+    page_number: int  # 1-indexed
+    mandatory: bool | None = None
+    format_instructions: str | None = None
+    form_reference: str | None = None
 
 
 def drop_nulls(values: dict[str, Any]) -> dict[str, Any]:

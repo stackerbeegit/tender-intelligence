@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.exceptions import LLMResponseError
+from app.bidding.draft import BID_DRAFT_SCHEMA
 from app.intelligence.extraction.schemas import EXTRACTION_SCHEMA, SUMMARY_SCHEMA
 from app.intelligence.llm.base import LLMClient, LLMResult
 
@@ -69,10 +70,12 @@ class FakeLLMClient(LLMClient):
                     for item in self.responses.get(kind, [])
                     if item.get("_seen_on_page", item["page_number"]) in pages_in_excerpt
                 ]
-                for kind in ("requirements", "eligibility")
+                for kind in ("requirements", "eligibility", "submission_documents")
             }
         elif schema is SUMMARY_SCHEMA:
             data = copy.deepcopy(self.responses["summary"])
+        elif schema is BID_DRAFT_SCHEMA:
+            data = copy.deepcopy(self.responses["bid_draft"])
         else:  # pragma: no cover
             raise AssertionError("unexpected schema")
 

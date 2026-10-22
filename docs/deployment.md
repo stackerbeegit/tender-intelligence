@@ -219,6 +219,20 @@ Migrations run automatically through the `migrate` service before the app restar
 Data lives in Docker volumes (`pgdata`, `redisdata`, `documents`) and survives rebuilds.
 **Don't run `down -v`**: that deletes the volumes.
 
+### Sprint 6 settings (e-mail, digest, auto-promotion)
+
+E-mail is off until SMTP is configured. In `.env`, set `NOTIFICATIONS_EMAIL_ENABLED=true`,
+`SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD`/`SMTP_FROM_ADDRESS`, and `APP_BASE_URL` (the
+public URL, used for links in e-mails). Then sign in as an admin and call
+`POST /api/v1/notifications/digest/test`: it sends you your own digest and returns whether it
+was `sent`, `failed` (with the SMTP error) or `skipped`. The daily digest goes out at
+`DIGEST_HOUR:DIGEST_MINUTE` in `SCHEDULER_TIMEZONE`. `OPPORTUNITY_AUTO_PROMOTE_MIN_SCORE`
+(default 70, 0 = off) controls which tenders become opportunities automatically.
+
+Tenders analysed before Sprint 6 have no "documents to submit" list until their analysis is
+re-run (Tender Intelligence → Re-run analysis). Bid preparation shows an empty checklist
+until then.
+
 ## 10. Day-to-day checks
 
 | What | Command |

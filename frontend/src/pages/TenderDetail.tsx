@@ -29,6 +29,7 @@ import { Link as RouterLink, useParams } from "react-router-dom";
 import { AnalysisPanel } from "@/components/AnalysisPanel";
 import { DeadlineChip } from "@/components/DeadlineChip";
 import { DocumentsPanel } from "@/components/DocumentsPanel";
+import { OpportunityActions } from "@/components/OpportunityActions";
 import { QualificationPanel } from "@/components/QualificationPanel";
 import { useAuth } from "@/hooks/useAuth";
 import { AppLayout } from "@/layouts/AppLayout";
@@ -244,6 +245,8 @@ export function TenderDetail() {
           </Grid>
         </Box>
       </Paper>
+
+      <OpportunityActions tenderId={tender.id} />
 
       <Grid container spacing={3}>
         <Grid item xs={12} md={5}>

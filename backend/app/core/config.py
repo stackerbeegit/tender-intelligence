@@ -126,6 +126,18 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from_address: str = "noreply@stackerbee.com"
     smtp_use_tls: bool = True
+    # Used to build links in emails (e.g. https://tenders.stackerbee.com).
+    app_base_url: str = "http://localhost:5173"
+    # Daily digest e-mail (Beat schedule, `scheduler_timezone`).
+    digest_enabled: bool = True
+    digest_hour: int = 8
+    digest_minute: int = 30
+
+    # --- Opportunity CRM (Sprint 6) ---
+    # A qualification at or above this relevance score, and not
+    # NOT_ELIGIBLE, promotes an open tender to a NEW opportunity
+    # automatically. 0 disables auto-promotion.
+    opportunity_auto_promote_min_score: int = 70
 
 
 @lru_cache

@@ -45,6 +45,7 @@ def test_analysis_is_empty_before_first_run(client, sample_tender):
         "analysis": None,
         "requirements": [],
         "eligibility": [],
+        "submission_documents": [],
     }
 
 
@@ -60,10 +61,11 @@ def test_run_analysis_returns_cited_facts_and_summary(client, sample_tender, sto
     assert body["analysis"]["summary"]["project"] == "Integrated Citizen Services Portal"
     assert len(body["requirements"]) == 7
     assert len(body["eligibility"]) == 5
-    for fact in body["requirements"] + body["eligibility"]:
+    assert len(body["submission_documents"]) == 10
+    for fact in body["requirements"] + body["eligibility"] + body["submission_documents"]:
         assert fact["citation"]["document_id"] == document["id"]
         assert fact["citation"]["file_name"] == "RFP.pdf"
-        assert 1 <= fact["citation"]["page_number"] <= 3
+        assert 1 <= fact["citation"]["page_number"] <= 4
 
     turnover = next(e for e in body["eligibility"] if e["criterion_type"] == "turnover")
     assert turnover["extracted_value"]["amount_inr"] == 100000000

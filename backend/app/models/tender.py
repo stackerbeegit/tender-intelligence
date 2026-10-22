@@ -56,8 +56,14 @@ class Tender(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     eligibility_criteria: Mapped[list["TenderEligibility"]] = relationship(  # noqa: F821
         back_populates="tender", cascade="all, delete-orphan", order_by="TenderEligibility.page_number"
     )
+    submission_documents: Mapped[list["TenderSubmissionDocument"]] = relationship(  # noqa: F821
+        back_populates="tender", cascade="all, delete-orphan", order_by="TenderSubmissionDocument.page_number"
+    )
     analysis: Mapped["TenderAnalysis | None"] = relationship(  # noqa: F821
         back_populates="tender", cascade="all, delete-orphan", uselist=False
+    )
+    opportunity: Mapped["Opportunity | None"] = relationship(  # noqa: F821
+        back_populates="tender", uselist=False
     )
     qualification: Mapped["QualificationResult | None"] = relationship(  # noqa: F821
         back_populates="tender", cascade="all, delete-orphan", uselist=False

@@ -156,3 +156,63 @@ class RiskSeverity(str, Enum):
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
+
+
+class SubmissionDocumentKind(str, Enum):
+    """What kind of document a tender asks bidders to submit (Sprint 6)."""
+
+    REGISTRATION = "registration"  # incorporation, PAN, GST
+    CERTIFICATE = "certificate"  # ISO, CMMI, CERT-In, MSME/startup certificates
+    FINANCIAL = "financial"  # turnover certificate, balance sheets, ITRs
+    EXPERIENCE = "experience"  # work orders, completion certificates
+    EMD = "emd"
+    FORM = "form"  # a prescribed annexure/format to fill in
+    DECLARATION = "declaration"  # self-declarations, undertakings, power of attorney
+    TECHNICAL_BID = "technical_bid"
+    FINANCIAL_BID = "financial_bid"
+    OTHER = "other"
+
+
+class OpportunityStatus(str, Enum):
+    """CRM workflow (docs/architecture.md §10). Allowed transitions live in
+    app/services/opportunity_service.py; WON, LOST and NO_BID are final."""
+
+    NEW = "new"
+    SCREENING = "screening"
+    QUALIFIED = "qualified"
+    MANAGEMENT_REVIEW = "management_review"
+    BID_NO_BID = "bid_no_bid"  # awaiting the human bid / no-bid decision
+    PROPOSAL_IN_PROGRESS = "proposal_in_progress"
+    SUBMITTED = "submitted"
+    TECHNICAL_EVALUATION = "technical_evaluation"
+    COMMERCIAL_EVALUATION = "commercial_evaluation"
+    WON = "won"
+    LOST = "lost"
+    NO_BID = "no_bid"
+
+
+class OpportunityOrigin(str, Enum):
+    AUTO_RELEVANCE = "auto_relevance"
+    MANUAL = "manual"
+
+
+class OpportunityTeam(str, Enum):
+    SALES = "sales"
+    BD = "bd"
+    TECHNICAL = "technical"
+    CYBERSECURITY = "cybersecurity"
+    MANAGEMENT = "management"
+    PROPOSAL = "proposal"
+
+
+class ChecklistItemStatus(str, Enum):
+    AVAILABLE = "available"
+    TO_PREPARE = "to_prepare"
+    MISSING = "missing"
+    NOT_APPLICABLE = "not_applicable"
+
+
+class NotificationStatus(str, Enum):
+    SENT = "sent"
+    FAILED = "failed"
+    SKIPPED = "skipped"  # channel disabled or not configured — recorded, not sent

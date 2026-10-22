@@ -269,7 +269,7 @@ factors.
   UNKNOWN. Qualification is not yet shown or sortable on the tenders list; Sprint 6's
   auto-promotion to opportunities will need that.
 
-## Sprint 6 — Opportunity CRM, notifications, digest
+## Sprint 6 — Opportunity CRM, notifications, digest ✅
 
 **Scope:** `opportunities`/`opportunity_assignments`/`opportunity_notes`/
 `opportunity_status_history`; workflow enforcement; email notification channel behind a
@@ -286,8 +286,10 @@ person reviews, completes and submits the bid on the portal.
 
 **Scope:**
 - **"Interested — prepare bid"** on the tender/opportunity page. It creates the opportunity
-  if there isn't one (`created_from=manual`), moves it to `bid_preparation` (audited like any
-  status change), and assigns the user to the `sales` team. `viewer`/`technical` don't see it.
+  if there isn't one (`created_from=manual`, audited) and assigns the user to their team
+  (`sales` for a sales user). It deliberately does **not** move the workflow status: the
+  bid / no-bid decision stays a separate step for a BD manager or admin (architecture §9).
+  `viewer`/`technical` don't see it.
 - **Submission document checklist.** Extend Sprint 4 extraction with a new fact type: the
   documents the tender says must be submitted (forms/annexures, certificates, financial
   statements, EMD proof, declarations, technical and financial bid formats). Each is stored
@@ -318,8 +320,8 @@ person reviews, completes and submits the bid on the portal.
   buttons.
 
 **Exit criteria (bid preparation):**
-- A sales user can trigger bid preparation; viewer/technical get 403; the status change is
-  in `opportunity_status_history`.
+- A sales user can trigger bid preparation; viewer/technical get 403; the opportunity's
+  creation is in `opportunity_status_history`.
 - On the Sprint 4 representative RFP, the checklist matches an expected fixture, and every
   item carries a document/page citation.
 - The draft contains no figure, certificate or project absent from its inputs (test
@@ -330,6 +332,95 @@ person reviews, completes and submits the bid on the portal.
 
 **Depends on:** Sprint 5 qualification (done) and the company profile being filled in. An
 LLM API key is needed for real drafts; tests use the scripted fake model, as in Sprint 4.
+
+**What shipped:**
+- **Opportunity CRM** (migration `0007`) — `opportunities` (one per tender), assignments,
+  notes and the append-only `opportunity_status_history`. All workflow rules live in
+  `app/services/opportunity_service.py`:
+  - `TRANSITIONS` is the only way a status moves: NEW → SCREENING → QUALIFIED →
+    MANAGEMENT_REVIEW → BID_NO_BID → PROPOSAL_IN_PROGRESS → SUBMITTED → TECHNICAL_EVALUATION →
+    COMMERCIAL_EVALUATION → WON/LOST, with NO_BID available up to the proposal stage.
+  - Leaving BID_NO_BID (the human bid / no-bid decision) is limited to BD managers and admins.
+  - NO_BID and LOST need a reason.
+  - An admin can override the graph with a mandatory comment, which is recorded as
+    `[override] …`.
+  - Every move writes a history row in the same commit, plus an audit log entry.
+  - Roles: admin/bd_manager/sales manage opportunities; technical can add notes and edit
+    the checklist; viewers read only.
+- **Auto-promotion** — after every qualification run, an open tender scoring at least
+  `OPPORTUNITY_AUTO_PROMOTE_MIN_SCORE` (default 70; 0 turns it off) that isn't NOT_ELIGIBLE
+  becomes a NEW opportunity (`created_from=auto_relevance`), recorded as done by the system.
+  BD managers are e-mailed.
+- **Tenders list** shows the relevance score, eligibility and an "In pipeline" marker. It can
+  sort by relevance and filter by `eligibility` / `min_relevance`. The category filter became
+  an `EXISTS` (no `SELECT DISTINCT`), which Postgres needs in order to sort by the relevance
+  subquery; this is pinned by a Postgres integration test.
+- **Notifications** (`app/notifications/`) — an e-mail channel behind a sender interface:
+  SMTP, or a disabled sender when `NOTIFICATIONS_EMAIL_ENABLED` is off or `SMTP_HOST` is
+  empty.
+  - Assignment, owner change, status change and auto-promotion e-mail the people involved,
+    never the person who acted.
+  - Every attempt is stored in `notifications` as sent, failed (with the error) or skipped
+    (not configured). A mail outage never fails the action that triggered it.
+  - Sending is synchronous for now; moving it onto the worker is Sprint 8.
+- **Daily digest** — a Celery Beat task (`DIGEST_HOUR`/`DIGEST_MINUTE`, default 08:30 IST).
+  Each active user gets tenders added in the last 24 hours (most relevant first), their open
+  opportunities (with those closing within 7 days flagged), and status changes others made.
+  It is sent as HTML and plain text, and skipped when empty or while e-mail is off. There is
+  a preview at `GET /notifications/digest/preview` and an admin "send me a test" at
+  `POST /notifications/digest/test`.
+- **Bid preparation** — as scoped above.
+  - Submission documents are a fourth fact type extracted in the same LLM call as the
+    Sprint 4 facts and given the same citation check (`tender_submission_documents`).
+  - The checklist is pre-filled `available` only for certificates the profile records, and
+    for MSE/startup exemption documents when a registration number is recorded.
+  - Statuses a person sets survive re-analysis: a sync re-links items to the new fact rows
+    by clause text.
+  - The draft's grounding check is in `app/bidding/grounding.py` and `draft.py`:
+    - Amounts must equal one in the inputs (to 0.5%).
+    - "N years" must use a number in the inputs.
+    - Certifications must be held per the profile, or be part of a solution requirement.
+      An eligibility statement may restate its own criterion's certificate.
+    - A criterion assessed NOT_MET/UNKNOWN must leave its evidence as `[TO FILL]`.
+    - Fact and project references must exist. Past projects are referenced by id and
+      rendered from the profile, never named by the model.
+    - Placeholder text is exempt.
+    - A failing draft is not stored. The rejection and its reasons are audited and shown to
+      the user.
+  - Downloads: `.docx` (placeholders highlighted in yellow, every row cited), `.xlsx`
+    (status drop-down, row heights set, prints on one landscape page wide) and `.zip`. All
+    authenticated and audited.
+- **Frontend** — an Opportunities list, and an opportunity page with two tabs:
+  - *Workflow & team*: status stepper, allowed next steps, a reason dialog, owner,
+    assignments, notes and history.
+  - *Bid preparation*: editable checklist with page citations, draft preview, regenerate,
+    and the three downloads.
+  The tender page has a pipeline bar ("Interested — prepare bid" / "Add to pipeline" /
+  "Open opportunity"). The tenders list has the Fit column and relevance sort.
+- **Tests:**
+  - 73 new backend tests (274 total; 3 of them Postgres integration tests against the
+    migrated database).
+  - Workflow: every transition audited, decision roles, reasons, overrides,
+    one-per-tender, notification recipients, a failing mail server recorded and not
+    raised, auto-promotion thresholds.
+  - Digest: selection, ordering, HTML escaping, empty digests, the scheduled task.
+  - Bid preparation: end to end on the RFP, which gained a 4th page listing documents to
+    submit. The checklist equals an expected fixture of 10 cited items. Drafts that
+    invent an amount, CMMI level, year count, ISO certificate or reference are rejected,
+    including a full API run where the scripted model invents a CMMI Level 5 and ₹50 Cr.
+    The .docx, .xlsx and .zip are opened and checked with `python-docx`/`openpyxl`.
+  - A mutation check (grounding verification disabled) fails 9 of them.
+  - Frontend: 5 new tests (13 total); lint and build clean.
+  - Migration `0007` passed upgrade → downgrade → upgrade on a scratch Postgres database and
+    is applied to the local dev database.
+- **Known limitations:**
+  - The grounding check covers amounts, year counts, certifications and references, not
+    every possible free-text claim (e.g. a made-up client name in prose). The prompt forbids
+    it and the draft is labelled for review, but that isn't a code guarantee.
+  - Existing tenders have no submission documents until their analysis is re-run.
+  - No real-model run yet: no API key here, as in Sprint 4.
+  - E-mail and the digest are tested with a captured outbox, not a real SMTP server.
+  - Not clicked through in a real browser.
 
 ## Sprint 7 — Semantic search & RAG
 
@@ -364,3 +455,4 @@ verified; test coverage report produced; a documented, repeatable deployment pro
 | 2026-10-04 | 3 | Document management: storage abstraction (local filesystem + S3/MinIO), download/validation, PDF/DOCX/XLSX/ZIP extraction, OCR fallback, chunking utility, orchestrating service, API, and a frontend documents panel. Verified against real generated files (DOCX→PDF via LibreOffice headless, an image-only PDF for the OCR path, a real XLSX, a ZIP bundle) rather than mocks — see `scripts/generate_doc_fixtures.py`. Tesseract genuinely isn't installed in this environment, so the brief's "test OCR failures" case was exercised for real, not simulated. Investigated why GeM's own bid-document URLs return empty bodies (confirmed across 8 fresh bids, not a one-off) — needs a fuller browser-session flow than plain HTTP replicates; left as a documented open item rather than pursued indefinitely. 75 backend tests passing; frontend build/lint/vitest all clean. |
 | 2026-10-04 | 4 | Tender intelligence: provider-agnostic LLM layer (Anthropic SDK + OpenAI-compatible httpx adapters), page-batched structured extraction of requirements/eligibility/MSME clauses, deterministic citation verification (a fact is stored only if its verbatim quote is found on the cited page), fact-grounded executive summary + AI category classification, API and frontend panel with FACT vs AI INTERPRETATION labelling. Fixed a Sprint 3 gap found on the way: documents kept only joined text, losing page numbers — added `extracted_pages` (migration `0005`, applied to the local Postgres). 126 backend tests + 4 frontend tests passing; endpoints exercised against the live local backend. No LLM API key available, so no real-model run yet — tests use a scripted fake. |
 | 2026-10-20 | 5 | Matching: admin-managed company profile (profile/capabilities/experience), deterministic eligibility/relevance/risk engine over Sprint 4's citation-verified facts (no model calls), `qualification_results` with evidence-linked reasons, stored factor breakdown and stale detection; Company Profile page and Qualification panel. Migration `0006` verified up/down/up on a scratch Postgres DB and applied to the local dev DB. 201 backend + 8 frontend tests passing. `alembic check` reports index drift on Sprint 2 tables (indexes created by migrations but not declared on models) — pre-existing, not touched here. |
+| 2026-10-22 | 6 | Opportunity CRM (workflow with audited transitions, human bid/no-bid decision, auto-promotion by relevance), e-mail notifications with every attempt recorded, daily digest (Beat), and sales-triggered bid preparation: cited submission-document checklist, grounded AI draft bid, .docx/.xlsx/.zip downloads. Tenders list gains relevance/eligibility and relevance sort. Migration `0007` verified up/down/up on scratch Postgres and applied to the local dev DB. 274 backend + 13 frontend tests passing. |

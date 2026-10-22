@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.matching.engine import ENGINE_VERSION, qualify
 from app.matching.types import (
@@ -30,6 +31,7 @@ from app.models.enums import AnalysisStatus
 from app.models.qualification_result import QualificationResult
 from app.models.stackerbee_profile import StackerbeeProfile
 from app.models.tender import Tender
+from app.services import opportunity_service
 from app.services.profile_service import get_profile, require_profile
 
 logger = get_logger(__name__)
@@ -148,6 +150,7 @@ def compute(db: Session, tender: Tender, now: datetime | None = None) -> Qualifi
     logger.info(
         "Qualified tender=%s status=%s score=%s", tender.id, outcome.eligibility_status.value, outcome.relevance_score
     )
+    opportunity_service.auto_promote(db, tender, result, get_settings().opportunity_auto_promote_min_score)
     return result
 
 

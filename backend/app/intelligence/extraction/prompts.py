@@ -7,7 +7,8 @@ from typing import Any
 
 EXTRACTION_SYSTEM = """\
 You read excerpts of Indian government tender documents (NIT, RFP, BOQ, \
-annexures) and extract the requirements and eligibility criteria they state. \
+annexures) and extract the requirements, eligibility criteria and \
+documents to be submitted that they state. \
 Your output is stored as evidence that a bid team relies on, so accuracy \
 matters more than coverage.
 
@@ -39,9 +40,20 @@ bidder certifications (ISO, CMMI, etc.), and any MSME / Startup / MSE clause \
 (criterion_type `msme_startup`, with msme_clause_kind). Record an MSME clause \
 exactly as written; do not conclude that any particular bidder qualifies.
 
-Skip boilerplate that is not a requirement (headers, contact details, \
-generic legal text, instructions on how to submit). If the excerpt states no \
-requirements or eligibility criteria, return empty arrays."""
+Submission documents (`submission_documents`): each document, certificate, \
+form, declaration or bid part the bidder must submit — one item per document \
+named (a clause listing two documents in one sentence may stay one item). \
+`document_name` is a short name ("PAN card and GST certificate"). \
+`mandatory` is true only when the text says it is required or shall be \
+submitted, false when it is optional, null when not stated. \
+`format_instructions` records how it must be provided as stated (on \
+letterhead, notarised, signed and stamped, on stamp paper, in a given \
+format), else null. `form_reference` is the annexure/form it must follow \
+("Annexure 1"), else null. A document required only as proof of an \
+eligibility criterion is still listed here.
+
+Skip boilerplate (headers, contact details, generic legal text, portal \
+login steps). If the excerpt states none of these, return empty arrays."""
 
 
 def build_extraction_user_prompt(tender_title: str, file_name: str, pages: list[tuple[int, str]]) -> str:

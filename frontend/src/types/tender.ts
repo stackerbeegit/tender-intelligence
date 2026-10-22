@@ -106,6 +106,9 @@ export interface TenderListItem {
   source_id: string;
   categories: Category[];
   locations: Location[];
+  /** Rule-based assessment; null until computed. */
+  qualification: { eligibility_status: "ELIGIBLE" | "NOT_ELIGIBLE" | "UNCERTAIN"; relevance_score: number } | null;
+  opportunity: { id: string; status: string } | null;
 }
 
 export interface TenderDetail extends TenderListItem {
@@ -139,6 +142,9 @@ export interface TenderFilters {
   closing_after?: string;
   closing_before?: string;
   status?: TenderStatus;
+  eligibility?: "ELIGIBLE" | "NOT_ELIGIBLE" | "UNCERTAIN";
+  min_relevance?: number;
+  sort?: "closing" | "relevance";
   page?: number;
   page_size?: number;
 }

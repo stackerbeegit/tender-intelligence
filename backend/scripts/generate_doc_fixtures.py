@@ -124,12 +124,33 @@ RFP_PAGES: list[tuple[str, list[str]]] = [
             "EMD as per the Public Procurement Policy for MSEs Order, 2012.",
         ],
     ),
+    (
+        "Section 6: Documents to be Submitted",
+        [
+            "The following documents shall be uploaded with the technical bid. Bids without any "
+            "mandatory document shall be rejected.",
+            "Technical bid covering letter in the format at Annexure 1, signed and stamped by the "
+            "authorised signatory.",
+            "Certificate of Incorporation or Registration of the bidding firm.",
+            "Copy of PAN card and GST registration certificate of the bidder.",
+            "CA-certified turnover certificate and audited balance sheets for the last three "
+            "financial years.",
+            "Work orders and completion certificates for each similar project claimed.",
+            "Copy of valid ISO 27001 certificate.",
+            "Self-declaration of not being blacklisted by any Government department, on the "
+            "bidder's letterhead, as per Annexure 3.",
+            "Power of Attorney in favour of the authorised signatory, on non-judicial stamp paper.",
+            "Bank Guarantee towards EMD, or a valid Udyam / NSIC certificate for EMD exemption.",
+            "The financial bid shall be submitted only in the BOQ format provided on the portal.",
+        ],
+    ),
 ]
 
 
 def make_rfp_pdf() -> Path:
-    """Sprint 4: a representative 3-page RFP whose clauses
-    tests/fixtures/intelligence/sample_rfp_expected.json describes. One
+    """Sprint 4: a representative RFP whose clauses
+    tests/fixtures/intelligence/sample_rfp_expected.json describes (page 4,
+    the submission-document list, was added in Sprint 6). One
     section per page (explicit page breaks) so page citations are
     deterministic."""
     doc = Document()

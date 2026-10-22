@@ -76,13 +76,14 @@ facts in place.
 
 | Table | Key columns | Notes |
 |---|---|---|
-| `opportunities` | `id`, `tender_id` FK (unique), `status` (the CRM workflow enum), `owner_id` FK→users, `created_from` (`auto_relevance`\|`manual`) | |
-| `opportunity_assignments` | `id`, `opportunity_id` FK, `user_id` FK, `team` (`sales`\|`bd`\|`technical`\|`cybersecurity`\|`management`\|`proposal`), `assigned_at` | |
+| `opportunities` | `id`, `tender_id` FK (unique), `status` (`new`→`screening`→`qualified`→`management_review`→`bid_no_bid`→`proposal_in_progress`→`submitted`→`technical_evaluation`→`commercial_evaluation`→`won`/`lost`, or `no_bid`), `owner_id` FK→users, `created_from` (`auto_relevance`\|`manual`), `created_by_id` FK→users (null = the system), `title` | Status changes only through `opportunity_service.transition()` |
+| `opportunity_assignments` | `id`, `opportunity_id` FK, `user_id` FK, `team` (`sales`\|`bd`\|`technical`\|`cybersecurity`\|`management`\|`proposal`), `assigned_by_id`, `created_at` (= assigned at) | Unique per (opportunity, user, team) |
 | `opportunity_notes` | `id`, `opportunity_id` FK, `author_id` FK, `note_text`, `created_at` | |
-| `opportunity_status_history` | `id`, `opportunity_id` FK, `from_status`, `to_status`, `changed_by` FK→users, `changed_at`, `comment` | Append-only, drives the audit trail required by §14/§27 of the brief |
-| `tender_submission_documents` | `id`, `tender_id` FK, `document_id` FK, `document_name`, `kind` (`form`\|`certificate`\|`financial`\|`emd`\|`declaration`\|`technical_bid`\|`financial_bid`\|`other`), `mandatory` (bool), `format_instructions`, `form_reference` (e.g. "Annexure 4"), `clause_text` (verbatim), `page_number`, `generated_by_model` | **Fact** table (Sprint 4-style citation check) — what the tender says must be submitted |
-| `bid_checklist_items` | `id`, `opportunity_id` FK, `submission_document_id` FK nullable (null = added by hand), `title`, `status` (`available`\|`to_prepare`\|`missing`\|`not_applicable`), `owner_id` FK→users nullable, `note`, `prefill_reason` | Working copy per opportunity; status pre-filled from the profile only where it can be confirmed |
-| `bid_drafts` | `id`, `opportunity_id` FK, `version`, `content` (jsonb sections), `placeholders` (jsonb list of `[TO FILL]` items), `generated_by_model`, `created_by` FK→users, `created_at` | **Interpretation** — AI draft from verified facts + qualification + profile; never submitted by the system |
+| `opportunity_status_history` | `id`, `opportunity_id` FK, `from_status` (null for creation), `to_status`, `changed_by_id` FK→users (null = the system), `changed_at`, `comment` (`[override] …` for admin overrides) | Append-only, written in the same commit as the status change — drives the audit trail required by §14/§27 of the brief |
+| `notifications` | `id`, `user_id` FK, `channel` (`email`), `event_type`, `subject`, `body_text`, `status` (`sent`\|`failed`\|`skipped`), `error`, `sent_at`, `entity_type`, `entity_id` | Every attempt, including failed and unconfigured ones |
+| `tender_submission_documents` | `id`, `tender_id` FK, `document_id` FK, `kind` (`registration`\|`certificate`\|`financial`\|`experience`\|`emd`\|`form`\|`declaration`\|`technical_bid`\|`financial_bid`\|`other`), `document_name`, `mandatory` (null = not stated), `format_instructions`, `form_reference`, `clause_text` (verbatim), `page_number`, `generated_by_model` | **Fact** table (Sprint 4-style citation check) — what the tender says must be submitted. Replaced on each analysis run |
+| `bid_checklist_items` | `id`, `opportunity_id` FK, `submission_document_id` FK (`ON DELETE SET NULL`; null for manual items or after a re-analysis until the next sync), `position`, `title`, `kind`, `mandatory`, `format_instructions`, `form_reference`, `source_clause`/`source_file_name`/`source_document_id`/`source_page` (copied, so the item stays readable), `is_manual`, `status` (`available`\|`to_prepare`\|`missing`\|`not_applicable`), `status_set_by_user`, `prefill_reason`, `owner_id`, `note` | Working copy per opportunity. Pre-filled `available` only where the profile confirms it; a status a person set is never overwritten by a sync |
+| `bid_drafts` | `id`, `opportunity_id` FK, `version` (unique per opportunity), `content` (jsonb: disclaimer, covering letter, company overview, eligibility/technical/manpower rows with citations, projects from the profile, assumptions, enclosures), `placeholders` (jsonb `[{section, text}]`), `generated_by_model`, `created_by_id` | **Interpretation** — stored only after the grounding check passes; never submitted by the system |
 
 ## 8. Entity relationship summary
 
@@ -126,3 +127,6 @@ their own migration — never hand-edited directly in a shared environment. So f
 - `0006_matching_and_profile` (Sprint 5) — creates `stackerbee_profile`,
   `stackerbee_capabilities`, `stackerbee_experience`, `qualification_results`. Seeds nothing:
   the profile is entered by an admin.
+- `0007_opportunities_and_bid_preparation` (Sprint 6) — creates `tender_submission_documents`,
+  `opportunities`, `opportunity_assignments`, `opportunity_notes`, `opportunity_status_history`,
+  `notifications`, `bid_checklist_items`, `bid_drafts`.

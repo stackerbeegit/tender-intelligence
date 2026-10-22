@@ -1,11 +1,13 @@
 """
-Scheduled tasks. `crawl_all_sources` is what Beat fires daily: it runs the
+Scheduled tasks. `send_daily_digest` e-mails each user their digest
+(app/notifications/digest.py). `crawl_all_sources` is what Beat fires daily: it runs the
 same CrawlerRunner as the admin "run crawl" endpoint, once per source that
 has crawling enabled and a registered connector. Each source gets its own
 DB session and failure boundary, so one broken portal never stops the rest;
 its outcome is recorded on `crawler_runs` / `sources.status` as usual.
 """
 from collections.abc import Callable
+from datetime import datetime, timedelta, timezone
 
 import redis
 from sqlalchemy import select
@@ -19,6 +21,9 @@ from app.core.config import get_settings
 from app.core.database import SessionLocal
 from app.core.logging import get_logger
 from app.models.source import Source
+from app.models.user import User
+from app.notifications import digest
+from app.services import notification_service
 from app.workers.celery_app import celery_app
 
 logger = get_logger(__name__)
@@ -76,3 +81,31 @@ def crawl_all_sources() -> list[dict] | dict:
             lock.release()
         except redis.exceptions.LockError:
             pass  # expired mid-run; nothing to release
+
+
+def send_daily_digests(session_factory: Callable[[], Session] = SessionLocal, now: datetime | None = None) -> dict:
+    """One digest per active user who has something in it. Skipped
+    entirely while e-mail is off, so no daily 'skipped' rows pile up."""
+    settings = get_settings()
+    if not settings.notifications_email_enabled or not settings.digest_enabled:
+        return {"status": "skipped", "reason": "e-mail or digest disabled"}
+    now = now or datetime.now(timezone.utc)
+    sent = empty = 0
+    with session_factory() as db:
+        new_tenders = digest.new_tenders_since(db, now - timedelta(hours=24))
+        users = db.scalars(select(User).where(User.is_active.is_(True)).order_by(User.email)).all()
+        for user in users:
+            content = digest.build_digest(db, user, now, new_tenders=new_tenders)
+            if content.is_empty:
+                empty += 1
+                continue
+            subject, text, html = digest.render_digest(content, user.full_name, settings.app_base_url)
+            notification_service.notify(db, [user], event_type="digest", subject=subject, text=text, html=html)
+            sent += 1
+    logger.info("Daily digest: %d sent, %d users had nothing new", sent, empty)
+    return {"status": "done", "sent": sent, "empty": empty}
+
+
+@celery_app.task(name="app.workers.tasks.send_daily_digest")
+def send_daily_digest() -> dict:
+    return send_daily_digests()
