@@ -278,6 +278,59 @@ provider abstraction; daily digest job.
 **Exit criteria:** status transitions are fully audited; a relevant tender can be
 promoted to an opportunity and assigned to a team; a test digest email renders correctly.
 
+### Bid preparation (sales-triggered)
+
+When a signed-in **sales** user (also `bd_manager`/`admin`) decides to bid on a tender, the
+system prepares a starting bid pack for people to finish. It never submits anything: a
+person reviews, completes and submits the bid on the portal.
+
+**Scope:**
+- **"Interested — prepare bid"** on the tender/opportunity page. It creates the opportunity
+  if there isn't one (`created_from=manual`), moves it to `bid_preparation` (audited like any
+  status change), and assigns the user to the `sales` team. `viewer`/`technical` don't see it.
+- **Submission document checklist.** Extend Sprint 4 extraction with a new fact type: the
+  documents the tender says must be submitted (forms/annexures, certificates, financial
+  statements, EMD proof, declarations, technical and financial bid formats). Each is stored
+  in `tender_submission_documents` with its name, kind, whether it is mandatory, the format
+  instructions ("on letterhead", "notarised", "signed and stamped"), the form/annexure
+  number, and the verbatim clause and page. Items get the same citation check as other facts:
+  an item whose quote isn't on the cited page is dropped.
+  The opportunity gets a working copy (`bid_checklist_items`) with a status per item
+  (`available`/`to_prepare`/`missing`/`not_applicable`), an owner and a note. The status is
+  pre-filled from the company profile where it can be (e.g. ISO 27001 required and held →
+  `available`). Anything that can't be matched starts as `to_prepare`, never `available`.
+- **Draft bid.** An AI-written draft (`bid_drafts`, versioned) built only from the tender's
+  verified facts, its qualification result and the company profile. Sections: covering
+  letter, company profile, eligibility compliance statement (one line per criterion with
+  the evidence the company holds), point-by-point technical compliance against the
+  extracted requirements, manpower deployment plan, list of enclosures (= the checklist).
+  **No invented credentials:** turnover, certifications, project names and values may only
+  come from the profile. Anything the inputs don't contain becomes a highlighted
+  `[TO FILL: …]` placeholder, and an automated check rejects a draft containing an amount,
+  certificate or project not found in its inputs. The draft is labelled **AI DRAFT — review
+  before use**.
+- **Downloads.** Draft bid as an editable **.docx**. Checklist as **.xlsx** with columns
+  #, document, mandatory, format instructions, tender reference (file · page), status,
+  owner, note. Both are also offered together as one **.zip bid pack**. Downloads are
+  authenticated (same pattern as document downloads) and each generation is audited.
+- **Frontend:** a *Bid preparation* tab on the opportunity with the editable checklist, the
+  draft preview with placeholders highlighted, "Regenerate draft", and the three download
+  buttons.
+
+**Exit criteria (bid preparation):**
+- A sales user can trigger bid preparation; viewer/technical get 403; the status change is
+  in `opportunity_status_history`.
+- On the Sprint 4 representative RFP, the checklist matches an expected fixture, and every
+  item carries a document/page citation.
+- The draft contains no figure, certificate or project absent from its inputs (test
+  includes a scripted model response that invents one, which must be rejected). Missing
+  profile data produces `[TO FILL]` placeholders, not guesses.
+- The .docx and .xlsx open and parse correctly (checked with `python-docx`/`openpyxl`,
+  both already dependencies). The zip contains both files.
+
+**Depends on:** Sprint 5 qualification (done) and the company profile being filled in. An
+LLM API key is needed for real drafts; tests use the scripted fake model, as in Sprint 4.
+
 ## Sprint 7 — Semantic search & RAG
 
 **Scope:** `tender_embeddings` + pgvector queries; structured + semantic search API/UI;

@@ -80,6 +80,9 @@ facts in place.
 | `opportunity_assignments` | `id`, `opportunity_id` FK, `user_id` FK, `team` (`sales`\|`bd`\|`technical`\|`cybersecurity`\|`management`\|`proposal`), `assigned_at` | |
 | `opportunity_notes` | `id`, `opportunity_id` FK, `author_id` FK, `note_text`, `created_at` | |
 | `opportunity_status_history` | `id`, `opportunity_id` FK, `from_status`, `to_status`, `changed_by` FK→users, `changed_at`, `comment` | Append-only, drives the audit trail required by §14/§27 of the brief |
+| `tender_submission_documents` | `id`, `tender_id` FK, `document_id` FK, `document_name`, `kind` (`form`\|`certificate`\|`financial`\|`emd`\|`declaration`\|`technical_bid`\|`financial_bid`\|`other`), `mandatory` (bool), `format_instructions`, `form_reference` (e.g. "Annexure 4"), `clause_text` (verbatim), `page_number`, `generated_by_model` | **Fact** table (Sprint 4-style citation check) — what the tender says must be submitted |
+| `bid_checklist_items` | `id`, `opportunity_id` FK, `submission_document_id` FK nullable (null = added by hand), `title`, `status` (`available`\|`to_prepare`\|`missing`\|`not_applicable`), `owner_id` FK→users nullable, `note`, `prefill_reason` | Working copy per opportunity; status pre-filled from the profile only where it can be confirmed |
+| `bid_drafts` | `id`, `opportunity_id` FK, `version`, `content` (jsonb sections), `placeholders` (jsonb list of `[TO FILL]` items), `generated_by_model`, `created_by` FK→users, `created_at` | **Interpretation** — AI draft from verified facts + qualification + profile; never submitted by the system |
 
 ## 8. Entity relationship summary
 
