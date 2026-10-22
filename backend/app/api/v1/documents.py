@@ -1,4 +1,5 @@
 import io
+import mimetypes
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
@@ -63,10 +64,24 @@ def download_document(
     tender_id: uuid.UUID, document_id: uuid.UUID, db: Session = Depends(get_db), _user: User = Depends(get_current_user)
 ):
     """Always streamed through this authenticated endpoint — documents are
-    never served from a public/unauthenticated path (brief §20)."""
+    never served from a public/unauthenticated path (brief §20).
+
+    A crawled document (e.g. a GeM bid PDF) is only known by its
+    `source_url` until someone processes it; downloading it fetches it from
+    the portal through the server first, then stores and processes it, so
+    the user never depends on reaching the portal from their own browser.
+    If the portal fetch fails, the reason is returned instead of a bare 404.
+    """
     document = _get_document_or_404(db, tender_id, document_id)
+    if not document.storage_path and document.source_url:
+        document = document_processing_service.process_document(db, document)
     if not document.storage_path:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="This document has not been downloaded/stored yet")
+        if document.source_url:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                detail=f"Could not fetch this document from the portal: {document.last_processing_error}",
+            )
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="This document has no stored file")
 
     try:
         data = get_storage_backend().get(document.storage_path)
@@ -75,6 +90,6 @@ def download_document(
 
     return StreamingResponse(
         io.BytesIO(data),
-        media_type="application/octet-stream",
+        media_type=mimetypes.guess_type(document.file_name)[0] or "application/octet-stream",
         headers={"Content-Disposition": f'attachment; filename="{document.file_name}"'},
     )

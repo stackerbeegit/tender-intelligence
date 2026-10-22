@@ -1,3 +1,5 @@
+import axios from "axios";
+
 import { api } from "./api";
 import type { TenderDocument } from "@/types/tender";
 
@@ -22,10 +24,24 @@ export const documentService = {
     return data;
   },
 
+  /** Rejects with the server's reason (e.g. the portal couldn't be reached). */
   async download(tenderId: string, documentId: string, fileName: string): Promise<void> {
-    const response = await api.get(`/tenders/${tenderId}/documents/${documentId}/download`, {
-      responseType: "blob",
-    });
+    let response;
+    try {
+      response = await api.get(`/tenders/${tenderId}/documents/${documentId}/download`, { responseType: "blob" });
+    } catch (err) {
+      // With responseType "blob" the error body is a Blob too; read its JSON detail.
+      const body = axios.isAxiosError(err) ? err.response?.data : undefined;
+      let detail = "The download failed.";
+      if (body instanceof Blob) {
+        try {
+          detail = JSON.parse(await body.text()).detail ?? detail;
+        } catch {
+          /* not JSON — keep the generic message */
+        }
+      }
+      throw new Error(detail);
+    }
     const url = URL.createObjectURL(response.data as Blob);
     const link = document.createElement("a");
     link.href = url;

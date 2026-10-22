@@ -37,6 +37,7 @@ from app.connectors.base.types import DiscoveredTenderRef, NormalisedDocument, N
 from app.connectors.gem import location, parser
 from app.connectors.registry import register
 from app.core.config import get_settings
+from app.core.http import tls_verify
 from app.core.logging import get_logger
 from app.document_processing.extractors.pdf_extractor import extract_pdf
 from app.models.enums import DocumentType, OrganisationType, SourceType, TenderCategory, TenderStatus
@@ -85,21 +86,13 @@ class GemConnector(BaseConnector):
         self._fetch_bid_pdfs = (
             fetch_bid_pdfs if fetch_bid_pdfs is not None else settings.gem_extract_consignee_locations
         )
-        # self._client = httpx.Client(
-        #     base_url=settings.gem_bidplus_base_url,
-        #     headers={"User-Agent": settings.crawler_user_agent},
-        #     timeout=settings.gem_request_timeout_seconds,
-        #     follow_redirects=True,
-        # )
-
         self._client = httpx.Client(
             base_url=settings.gem_bidplus_base_url,
             headers={"User-Agent": settings.crawler_user_agent},
             timeout=settings.gem_request_timeout_seconds,
             follow_redirects=True,
-            verify="/etc/ssl/certs/ca-certificates.crt",
+            verify=tls_verify(),
         )
-
 
     def _get_csrf_token(self) -> str:
         response = self._client.get("/all-bids")

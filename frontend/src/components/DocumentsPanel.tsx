@@ -9,6 +9,7 @@ import {
   Box,
   Button,
   Chip,
+  CircularProgress,
   Collapse,
   IconButton,
   List,
@@ -59,6 +60,7 @@ export function DocumentsPanel({ tenderId, documents, canManage, onDocumentsChan
   const [documentType, setDocumentType] = useState("other");
   const [isUploading, setIsUploading] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -91,8 +93,18 @@ export function DocumentsPanel({ tenderId, documents, canManage, onDocumentsChan
     }
   };
 
-  const handleDownload = (doc: TenderDocument) => {
-    documentService.download(tenderId, doc.id, doc.file_name);
+  const handleDownload = async (doc: TenderDocument) => {
+    setError(null);
+    setDownloadingId(doc.id);
+    try {
+      await documentService.download(tenderId, doc.id, doc.file_name);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "The download failed.");
+    } finally {
+      setDownloadingId(null);
+      // A first download fetches the file from the portal and processes it.
+      if (!doc.storage_path) onDocumentsChanged();
+    }
   };
 
   return (
@@ -152,9 +164,15 @@ export function DocumentsPanel({ tenderId, documents, canManage, onDocumentsChan
                       <PlayArrowIcon fontSize="small" />
                     </IconButton>
                   )}
-                  {doc.storage_path && (
-                    <IconButton size="small" aria-label="download document" onClick={() => handleDownload(doc)}>
-                      <DownloadIcon fontSize="small" />
+                  {(doc.storage_path || doc.source_url) && (
+                    <IconButton
+                      size="small"
+                      aria-label="download document"
+                      title={doc.storage_path ? "Download" : "Fetch from the portal and download"}
+                      disabled={downloadingId === doc.id}
+                      onClick={() => handleDownload(doc)}
+                    >
+                      {downloadingId === doc.id ? <CircularProgress size={16} /> : <DownloadIcon fontSize="small" />}
                     </IconButton>
                   )}
                   {doc.extracted_text && (
@@ -179,6 +197,11 @@ export function DocumentsPanel({ tenderId, documents, canManage, onDocumentsChan
                     <Chip label={doc.extraction_status} size="small" color={EXTRACTION_COLORS[doc.extraction_status]} />
                     {doc.ocr_status !== "not_required" && (
                       <Chip label={`ocr: ${doc.ocr_status}`} size="small" color={OCR_COLORS[doc.ocr_status]} />
+                    )}
+                    {doc.extraction_status === "failed" && doc.last_processing_error && (
+                      <Typography variant="caption" color="error.main" sx={{ width: "100%" }}>
+                        {doc.last_processing_error}
+                      </Typography>
                     )}
                     <Typography variant="caption" color="text.secondary">
                       {formatBytes(doc.file_size_bytes)}

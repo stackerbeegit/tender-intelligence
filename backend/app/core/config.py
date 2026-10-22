@@ -102,6 +102,9 @@ class Settings(BaseSettings):
     crawler_default_rate_limit_seconds: float = 2.0
     crawler_default_retry_attempts: int = 3
     crawler_user_agent: str = "StackerbeeTenderBot/1.0 (+https://stackerbee.com/bot)"
+    # CA bundle for outbound HTTPS (crawler + document downloads). Empty =
+    # the OS bundle if present, else certifi — see app/core/http.py.
+    outbound_ca_bundle: str = ""
 
     # --- GeM connector ---
     # bidplus.gem.gov.in/all-bids is GeM's own public bid-listing page; this

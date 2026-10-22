@@ -5,6 +5,7 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.exceptions import DocumentDownloadError
+from app.core.http import tls_verify
 
 
 def download_document(url: str) -> bytes:
@@ -16,6 +17,7 @@ def download_document(url: str) -> bytes:
             headers={"User-Agent": settings.crawler_user_agent},
             timeout=settings.document_download_timeout_seconds,
             follow_redirects=True,
+            verify=tls_verify(),
         ) as response:
             response.raise_for_status()
             chunks = bytearray()
