@@ -59,6 +59,9 @@ class Tender(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     analysis: Mapped["TenderAnalysis | None"] = relationship(  # noqa: F821
         back_populates="tender", cascade="all, delete-orphan", uselist=False
     )
+    qualification: Mapped["QualificationResult | None"] = relationship(  # noqa: F821
+        back_populates="tender", cascade="all, delete-orphan", uselist=False
+    )
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Tender {self.title[:40]!r}>"

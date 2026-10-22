@@ -15,7 +15,8 @@ from app.schemas.analysis import (
     RequirementRead,
     TenderAnalysisResponse,
 )
-from app.services import tender_intelligence_service
+from app.models.enums import AnalysisStatus
+from app.services import qualification_service, tender_intelligence_service
 
 router = APIRouter(prefix="/tenders/{tender_id}", tags=["analysis"])
 
@@ -75,10 +76,15 @@ def run_analysis(
 ):
     """Runs extraction + summary synchronously. A failed run still returns
     200: the outcome (status=failed + error) is recorded on the analysis
-    itself, and the previous run's facts are left in place."""
+    itself, and the previous run's facts are left in place. A successful
+    run also refreshes the tender's qualification, once a company profile
+    exists, so it never lags behind the facts it was computed from."""
     tender = _get_tender_or_404(db, tender_id)
-    tender_intelligence_service.analyse_tender(db, tender)
+    analysis = tender_intelligence_service.analyse_tender(db, tender)
     db.expire_all()
+    if analysis.status is AnalysisStatus.DONE:
+        qualification_service.compute_if_profile_exists(db, _get_tender_or_404(db, tender_id))
+        db.expire_all()
     return _build_response(_get_tender_or_404(db, tender_id))
 
 

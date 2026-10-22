@@ -4,6 +4,7 @@ import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import CalendarMonthOutlinedIcon from "@mui/icons-material/CalendarMonthOutlined";
 import CurrencyRupeeIcon from "@mui/icons-material/CurrencyRupee";
 import EventBusyOutlinedIcon from "@mui/icons-material/EventBusyOutlined";
+import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined";
 import FolderOpenOutlinedIcon from "@mui/icons-material/FolderOpenOutlined";
 import HistoryIcon from "@mui/icons-material/History";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
@@ -28,6 +29,7 @@ import { Link as RouterLink, useParams } from "react-router-dom";
 import { AnalysisPanel } from "@/components/AnalysisPanel";
 import { DeadlineChip } from "@/components/DeadlineChip";
 import { DocumentsPanel } from "@/components/DocumentsPanel";
+import { QualificationPanel } from "@/components/QualificationPanel";
 import { useAuth } from "@/hooks/useAuth";
 import { AppLayout } from "@/layouts/AppLayout";
 import { tenderService } from "@/services/tenderService";
@@ -95,6 +97,8 @@ export function TenderDetail() {
   const { user } = useAuth();
   const [tender, setTender] = useState<TenderDetailType | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Bumped after an analysis run: the backend recomputes qualification then.
+  const [factsVersion, setFactsVersion] = useState(0);
 
   const refresh = useCallback(() => {
     if (!id) return;
@@ -294,8 +298,25 @@ export function TenderDetail() {
         </Grid>
 
         <Grid item xs={12}>
+          <Section
+            icon={<FactCheckOutlinedIcon />}
+            title="Qualification"
+            subtitle="Can Stackerbee bid, how well does it fit, and what could go wrong."
+          >
+            <QualificationPanel tenderId={tender.id} canCompute={canManage} reloadKey={factsVersion} />
+          </Section>
+        </Grid>
+
+        <Grid item xs={12}>
           <Section icon={<AutoAwesomeIcon />} title="Tender Intelligence">
-            <AnalysisPanel tenderId={tender.id} canRun={canManage} onAnalysisChanged={refresh} />
+            <AnalysisPanel
+              tenderId={tender.id}
+              canRun={canManage}
+              onAnalysisChanged={() => {
+                refresh();
+                setFactsVersion((v) => v + 1);
+              }}
+            />
           </Section>
         </Grid>
       </Grid>

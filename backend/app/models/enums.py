@@ -123,3 +123,36 @@ class AnalysisStatus(str, Enum):
     RUNNING = "running"
     DONE = "done"
     FAILED = "failed"
+
+
+class CustomerType(str, Enum):
+    GOVERNMENT = "government"
+    PSU = "psu"
+    PRIVATE = "private"
+
+
+class EligibilityStatus(str, Enum):
+    """Overall verdict on `qualification_results` (docs/architecture.md §7).
+    Upper-case values, as the architecture doc and UI spell them."""
+
+    ELIGIBLE = "ELIGIBLE"
+    NOT_ELIGIBLE = "NOT_ELIGIBLE"
+    UNCERTAIN = "UNCERTAIN"
+
+
+class CriterionOutcome(str, Enum):
+    """Result of checking one eligibility fact against the company profile.
+    UNKNOWN means the data needed to decide is missing or ambiguous — it is
+    never treated as a pass. INFO marks clauses that are not pass/fail gates
+    (EMD, tender fee, MSME benefits)."""
+
+    MET = "MET"
+    NOT_MET = "NOT_MET"
+    UNKNOWN = "UNKNOWN"
+    INFO = "INFO"
+
+
+class RiskSeverity(str, Enum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"

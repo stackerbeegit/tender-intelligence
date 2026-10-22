@@ -62,15 +62,15 @@ facts in place.
 
 | Table | Key columns | Notes |
 |---|---|---|
-| `stackerbee_profile` | `id` (single row), `company_name`, `msme_status` (bool + certificate ref), `startup_status` (bool + certificate ref), `turnover_by_year` (jsonb), `years_in_business`, `employee_count`, `locations` (jsonb array) | Admin-editable, not hardcoded |
-| `stackerbee_capabilities` | `id`, `capability` (enum: the 10+ focus areas), `technologies` (jsonb array), `certifications` (jsonb array) | |
-| `stackerbee_experience` | `id`, `project_name`, `customer_type` (`government`\|`psu`\|`private`), `industry`, `technology` (jsonb array), `project_value`, `year`, `description`, `related_capability_id` FK | Feeds the "similar project" eligibility check |
+| `stackerbee_profile` | `id` (single row), `company_name`, `msme_registered` (bool, **null = not recorded**) + `msme_certificate_ref`, `startup_registered` (bool, null = not recorded) + `startup_certificate_ref`, `turnover_by_year` (jsonb `[{financial_year: "2024-25", amount_inr}]`), `net_worth_inr`, `years_in_business`, `employee_count`, `locations` (jsonb array of states; "Pan India" matches anywhere), `certifications` (jsonb array — company-level, e.g. ISO 27001, CMMI Level 3) | Admin-editable via `PUT /profile`, not hardcoded or seeded. Nullable fields make matching answer UNKNOWN instead of guessing. Every change to it or its children bumps `updated_at`, which is what marks stored qualification results stale |
+| `stackerbee_capabilities` | `id`, `profile_id` FK, `capability` (the `TenderCategory` enum tenders are classified with — one row per category), `technologies` (jsonb array), `certifications` (jsonb array), `description` | Technical fit compares these directly with tender categories and the technologies named in `tender_requirements` |
+| `stackerbee_experience` | `id`, `profile_id` FK, `project_name`, `client_name`, `customer_type` (`government`\|`psu`\|`private`), `capability` (`TenderCategory`, nullable), `industry`, `technologies` (jsonb array), `project_value_inr`, `year` (completion), `description` | Feeds the similar-project and government-experience checks. A project with no value or no capability can't *confirm* a criterion that needs one — it makes the outcome UNKNOWN, not MET |
 
 ## 6. Matching — facts vs. interpretation (Sprint 5)
 
 | Table | Key columns | Notes |
 |---|---|---|
-| `qualification_results` | `id`, `tender_id` FK, `eligibility_status` (`ELIGIBLE`\|`NOT_ELIGIBLE`\|`UNCERTAIN`), `reasons` (jsonb array of `{text, polarity: support\|concern, evidence_ref}`), `relevance_score`, `relevance_factors` (jsonb: technical/eligibility/experience/manpower/commercial/location/msme/urgency, each 0–100 with evidence refs), `risks` (jsonb array of `{risk, severity, evidence, document_id, page}`), `computed_at` | **Interpretation** table — explicitly separate from `tender_eligibility` facts above; `relevance_score` is always reconstructable from `relevance_factors`, never stored as a bare number alone |
+| `qualification_results` | `id`, `tender_id` FK (unique), `eligibility_status` (`ELIGIBLE`\|`NOT_ELIGIBLE`\|`UNCERTAIN`), `reasons` (jsonb array of `{criterion_type, outcome: MET\|NOT_MET\|UNKNOWN\|INFO, polarity: support\|concern\|neutral, text, evidence: {fact_id, document_id, file_name, page_number, quote}, profile_evidence}`), `relevance_score` (int, indexed), `relevance_factors` (jsonb: technical/eligibility/experience/manpower/commercial/location/msme/deadline, each `{score 0–100, weight, known, explanation, evidence}`), `risks` (jsonb array of `{risk, severity: high\|medium\|low, explanation, evidence, fact_id, document_id, file_name, page}`), `engine_version`, `computed_at` | **Interpretation** table — explicitly separate from `tender_eligibility` facts above, computed by the deterministic rules in `app/matching/` (no model call). `relevance_score` always equals `round(Σ score·weight / Σ weight)` over `relevance_factors`. `evidence.fact_id` points at the `tender_eligibility` row a reason came from |
 
 ## 7. Opportunity CRM (Sprint 6)
 
@@ -120,3 +120,6 @@ their own migration — never hand-edited directly in a shared environment. So f
   `tender_documents.last_processing_error`.
 - `0005_tender_intelligence` (Sprint 4) — adds `tender_documents.extracted_pages`; creates
   `tender_requirements`, `tender_eligibility`, `tender_analysis`.
+- `0006_matching_and_profile` (Sprint 5) — creates `stackerbee_profile`,
+  `stackerbee_capabilities`, `stackerbee_experience`, `qualification_results`. Seeds nothing:
+  the profile is entered by an admin.

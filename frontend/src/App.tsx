@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AuthProvider } from "@/hooks/useAuth";
+import { CompanyProfile } from "@/pages/CompanyProfile";
 import { Dashboard } from "@/pages/Dashboard";
 import { Login } from "@/pages/Login";
 import { ManualTenderForm } from "@/pages/ManualTenderForm";
@@ -52,6 +53,14 @@ export function App() {
             element={
               <ProtectedRoute>
                 <SourcesAdmin />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <CompanyProfile />
               </ProtectedRoute>
             }
           />

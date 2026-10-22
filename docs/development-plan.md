@@ -205,7 +205,7 @@ document/page citation.
   (Sprint 8). A clause that straddles the split point of an oversized page can't be
   verified and is dropped.
 
-## Sprint 5 — Matching, eligibility, relevance, risk
+## Sprint 5 — Matching, eligibility, relevance, risk ✅
 
 **Scope:** `stackerbee_profile`/`capabilities`/`experience` admin-managed tables;
 `qualification_results` (eligibility + relevance factors + risks, all evidence-linked);
@@ -215,6 +215,59 @@ interpretation calls.
 **Exit criteria:** matching engine unit tests cover ELIGIBLE/NOT_ELIGIBLE/UNCERTAIN and
 UNKNOWN-on-missing-data cases; relevance score is always reconstructable from stored
 factors.
+
+**What shipped:**
+- **Company profile** — `stackerbee_profile` (single row), `stackerbee_capabilities`,
+  `stackerbee_experience` (migration `0006`). Admin-only edits through `PUT /profile` and
+  `POST/PATCH/DELETE /profile/capabilities|experience/{id}`, each audited; readable by every
+  signed-in user (`GET /profile`). Nothing is seeded: an admin enters the real figures.
+  Unknown values stay null (MSME/startup status are three-state, not default-false), so the
+  engine can tell "not registered" from "not recorded".
+- **Matching engine** (`app/matching/`) — pure functions over plain dataclasses: no
+  database, no model call, `now` passed in, so the same facts and profile always give the same
+  result. **The deterministic/LLM split:** all model interpretation stays in Sprint 4
+  extraction, whose output is citation-verified before it is stored; this sprint's code only
+  compares those verified numbers and names against the profile.
+  - *Eligibility* — one rule per criterion type (turnover, net worth, similar projects,
+    government experience, years in business, certification). MET/NOT_MET only when the data
+    settles it; missing profile data, an unreadable clause value or an `other` criterion give
+    UNKNOWN. Ambiguous clauses are evaluated under every reading and are definite only when
+    the readings agree (e.g. "turnover of ₹10 Cr" with no average/each-year wording; a past
+    project whose value isn't recorded). EMD/tender fee/performance security/MSME clauses are
+    INFO, not gates. MSE/startup relaxation clauses turn a NOT_MET turnover/experience
+    criterion into UNKNOWN when the company qualifies. Verdict: any NOT_MET → NOT_ELIGIBLE;
+    else any UNKNOWN, or no pass/fail criterion at all → UNCERTAIN; else ELIGIBLE.
+  - *Relevance* — eight weighted factors (technical 30, eligibility 20, experience 15,
+    manpower 10, commercial 10, location 5, MSME 5, deadline 5), each stored with score,
+    weight, explanation and evidence. A factor without data is `known: false` at a neutral 50.
+    The score is only ever `relevance_score(factors)`.
+  - *Risks* — severity-ranked, independent of the verdict: failed/unconfirmed criteria,
+    deadline, penalty/LD clauses, manpower vs. headcount, senior roles, long contracts, EMD and
+    performance security, contract size vs. past projects, corrigenda, unanalysed tenders.
+    Each clause-raised risk carries its quote and document/page.
+- **`qualification_results`** + `GET/POST /tenders/{id}/qualification`. GET returns the stored
+  row as computed plus `is_stale` (the profile, the tender's facts/categories or
+  `ENGINE_VERSION` changed since) — it never silently recomputes on read. A successful
+  analysis run recomputes it automatically when a profile exists.
+- **Frontend** — a *Company Profile* page (amounts entered in ₹ crore; read-only for
+  non-admins) and a *Qualification* section on the tender page: verdict, relevance score,
+  every reason with its outcome, clause and clickable `file · p.N` citation, the factor
+  breakdown with weights, and risks. Labelled **ASSESSMENT** (rule-based) to keep it distinct
+  from Sprint 4's AI INTERPRETATION summary.
+- **Tests:** 59 new backend tests, 201 passing in total. These include 45 engine unit tests
+  built on the Sprint 4 representative RFP's verified clauses. They cover every verdict,
+  UNKNOWN for each kind of missing data, the agree-or-UNKNOWN rule, and score
+  reconstruction. A mutation check (missing data treated as a pass or fail) fails 3 of them.
+  There are also API tests for the profile, qualification and post-analysis recompute, and a
+  Postgres integration test. The Postgres test exists because Postgres hands back
+  timezone-aware datetimes for the stale check, while SQLite's are naive. Migration `0006`
+  passed upgrade → downgrade → upgrade on a scratch Postgres database and is applied to the
+  local dev database. Frontend: 3 new panel tests (8 total), lint and build clean on Node 20.
+- **Known limitations:** "similar project" is judged by capability category, not by reading
+  the project description. A certification is recognised only if it is ISO nnnnn, a CMMI
+  level, CERT-In, or a profile certificate named verbatim in the clause; anything else is
+  UNKNOWN. Qualification is not yet shown or sortable on the tenders list; Sprint 6's
+  auto-promotion to opportunities will need that.
 
 ## Sprint 6 — Opportunity CRM, notifications, digest
 
@@ -257,3 +310,4 @@ verified; test coverage report produced; a documented, repeatable deployment pro
 | 2026-10-04 | 2 | User flagged that the first GeM crawl's results were all clustered on one closing date and not relevant to Stackerbee's focus areas — correctly diagnosed as a connector design choice (sort=soonest-closing + small page cap), not a real cutoff/filter. Reworked `discover()` to run one GeM full-text search per Stackerbee focus area (9 keywords) instead of pulling the unfiltered "all ongoing bids" feed, tagging each result with the matched category; added a defensive past-closing-date skip. Re-crawled: 156 bids discovered, 155 new, spread across all 9 categories and 24 different closing dates (Oct 5 – Nov 2), zero past-dated. 50 backend tests passing. |
 | 2026-10-04 | 3 | Document management: storage abstraction (local filesystem + S3/MinIO), download/validation, PDF/DOCX/XLSX/ZIP extraction, OCR fallback, chunking utility, orchestrating service, API, and a frontend documents panel. Verified against real generated files (DOCX→PDF via LibreOffice headless, an image-only PDF for the OCR path, a real XLSX, a ZIP bundle) rather than mocks — see `scripts/generate_doc_fixtures.py`. Tesseract genuinely isn't installed in this environment, so the brief's "test OCR failures" case was exercised for real, not simulated. Investigated why GeM's own bid-document URLs return empty bodies (confirmed across 8 fresh bids, not a one-off) — needs a fuller browser-session flow than plain HTTP replicates; left as a documented open item rather than pursued indefinitely. 75 backend tests passing; frontend build/lint/vitest all clean. |
 | 2026-10-04 | 4 | Tender intelligence: provider-agnostic LLM layer (Anthropic SDK + OpenAI-compatible httpx adapters), page-batched structured extraction of requirements/eligibility/MSME clauses, deterministic citation verification (a fact is stored only if its verbatim quote is found on the cited page), fact-grounded executive summary + AI category classification, API and frontend panel with FACT vs AI INTERPRETATION labelling. Fixed a Sprint 3 gap found on the way: documents kept only joined text, losing page numbers — added `extracted_pages` (migration `0005`, applied to the local Postgres). 126 backend tests + 4 frontend tests passing; endpoints exercised against the live local backend. No LLM API key available, so no real-model run yet — tests use a scripted fake. |
+| 2026-10-20 | 5 | Matching: admin-managed company profile (profile/capabilities/experience), deterministic eligibility/relevance/risk engine over Sprint 4's citation-verified facts (no model calls), `qualification_results` with evidence-linked reasons, stored factor breakdown and stale detection; Company Profile page and Qualification panel. Migration `0006` verified up/down/up on a scratch Postgres DB and applied to the local dev DB. 201 backend + 8 frontend tests passing. `alembic check` reports index drift on Sprint 2 tables (indexes created by migrations but not declared on models) — pre-existing, not touched here. |
