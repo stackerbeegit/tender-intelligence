@@ -202,9 +202,18 @@ passwords if they were only ever meant for local testing.
 
 ```bash
 cd /opt/tender-intelligence
-git pull
-docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+./deploy.sh                 # pulls the branch the server is on, rebuilds, restarts
 ```
+
+To deploy a different branch (for example a release branch `v1`), push it to GitHub and run
+once on the server:
+
+```bash
+./deploy.sh --branch v1
+```
+
+The server stays on that branch, so later plain `./deploy.sh` runs keep deploying it. Check
+which branch is live with `git -C /opt/tender-intelligence branch --show-current`.
 
 Migrations run automatically through the `migrate` service before the app restarts.
 Data lives in Docker volumes (`pgdata`, `redisdata`, `documents`) and survives rebuilds.

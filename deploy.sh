@@ -12,6 +12,8 @@
 #
 # Later:
 #   ./deploy.sh                       # pull latest code, rebuild, restart
+#   ./deploy.sh --branch v1           # switch the server to branch v1, then deploy it
+#                                     # (it stays on v1 for later plain ./deploy.sh runs)
 #   ./deploy.sh status | logs [service] | crawl | backup
 # =============================================================================
 set -euo pipefail
@@ -75,11 +77,23 @@ ensure_env() {
 
 # --- steps --------------------------------------------------------------------
 pull_code() {
+  local branch="${1:-}"
   if [[ -d .git ]]; then
     if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
+      [[ -z "$branch" ]] || die "Local changes in the repo — commit or discard them before switching to '$branch'"
       warn "Local changes in the repo — skipping git pull"
+    elif [[ -n "$branch" ]]; then
+      info "Fetching and switching to branch '$branch'"
+      git fetch origin
+      git rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null \
+        || die "Branch '$branch' does not exist on origin — push it first"
+      if [[ "$(git rev-parse --abbrev-ref HEAD)" != "$branch" ]]; then
+        git checkout "$branch"
+      fi
+      git branch --set-upstream-to="origin/$branch" "$branch" >/dev/null
+      git pull --ff-only origin "$branch"
     else
-      info "Pulling latest code"
+      info "Pulling latest code (branch $(git rev-parse --abbrev-ref HEAD))"
       git pull --ff-only
     fi
   fi
@@ -134,9 +148,10 @@ seed_and_cron() {
 }
 
 deploy() {
-  local db_dump="" docs_tar=""
+  local db_dump="" docs_tar="" branch=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
+      --branch)       branch="${2:?--branch needs a branch name}"; shift 2 ;;
       --restore-db)   db_dump="${2:?--restore-db needs a file}"; shift 2 ;;
       --restore-docs) docs_tar="${2:?--restore-docs needs a file}"; shift 2 ;;
       --no-pull)      NO_PULL=1; shift ;;
@@ -146,7 +161,11 @@ deploy() {
 
   ensure_docker
   ensure_env
-  [[ -n "${NO_PULL:-}" ]] || pull_code
+  if [[ -n "${NO_PULL:-}" ]]; then
+    [[ -z "$branch" ]] || die "--branch and --no-pull cannot be combined"
+  else
+    pull_code "$branch"
+  fi
 
   info "Building images (first time takes a few minutes)"
   dc build
@@ -182,5 +201,5 @@ case "${1:-deploy}" in
               dc exec -T worker celery -A app.workers.celery_app call app.workers.tasks.crawl_all_sources
               info "Follow it with: ./deploy.sh logs worker" ;;
   backup)     ./infrastructure/scripts/backup-db.sh ;;
-  *) die "Usage: ./deploy.sh [deploy] [--restore-db FILE] [--restore-docs FILE] [--no-pull] | status | logs [service] | crawl | backup" ;;
+  *) die "Usage: ./deploy.sh [deploy] [--branch NAME] [--restore-db FILE] [--restore-docs FILE] [--no-pull] | status | logs [service] | crawl | backup" ;;
 esac
