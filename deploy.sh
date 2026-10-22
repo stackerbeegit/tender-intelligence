@@ -44,6 +44,27 @@ ensure_docker() {
   docker info >/dev/null 2>&1 || die "Can't talk to Docker. Is it running, and is $USER in the 'docker' group? (log out/in after usermod)"
 }
 
+# Small servers (2 GB RAM, no swap) get OOM-killed during image builds:
+# apt-get alone can use >1 GB. Add a swap file once if there is none.
+ensure_swap() {
+  local mem_kb swap_kb
+  mem_kb="$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)"
+  swap_kb="$(awk '/^SwapTotal:/ {print $2}' /proc/meminfo)"
+  if (( swap_kb == 0 && mem_kb < 4 * 1024 * 1024 )); then
+    info "Low RAM ($(( mem_kb / 1024 )) MB) and no swap — creating a 4 GB swap file (needs sudo)"
+    if [[ ! -f /swapfile ]]; then
+      sudo fallocate -l 4G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=4096
+      sudo chmod 600 /swapfile
+      sudo mkswap /swapfile >/dev/null
+    fi
+    sudo swapon /swapfile
+    grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab >/dev/null
+    echo 'vm.swappiness=10' | sudo tee /etc/sysctl.d/99-swap.conf >/dev/null
+    sudo sysctl -q -p /etc/sysctl.d/99-swap.conf
+    info "Swap enabled: $(free -h | awk '/^Swap:/ {print $2}')"
+  fi
+}
+
 # --- .env ---------------------------------------------------------------------
 ensure_env() {
   if [[ ! -f .env ]]; then
@@ -97,6 +118,23 @@ pull_code() {
       git pull --ff-only
     fi
   fi
+}
+
+# Build one service at a time instead of all in parallel. backend, worker,
+# beat and migrate share the same Dockerfile, so after backend is built the
+# others come straight from the build cache — one apt-get run, not four.
+build_images() {
+  local services svc
+  services="$(dc config --services)"
+  if grep -qx backend <<<"$services"; then
+    info "Building backend"
+    dc build --progress=plain backend
+  fi
+  for svc in $services; do
+    [[ "$svc" == backend ]] && continue
+    info "Building $svc"
+    dc build --progress=plain "$svc"
+  done
 }
 
 wait_healthy() {
@@ -160,6 +198,7 @@ deploy() {
   done
 
   ensure_docker
+  ensure_swap
   ensure_env
   if [[ -n "${NO_PULL:-}" ]]; then
     [[ -z "$branch" ]] || die "--branch and --no-pull cannot be combined"
@@ -167,15 +206,15 @@ deploy() {
     pull_code "$branch"
   fi
 
-  info "Building images (first time takes a few minutes)"
-  dc build
+  info "Building images one at a time (first time takes a few minutes)"
+  build_images
 
   if [[ -n "$db_dump$docs_tar" ]]; then
     restore_data "$db_dump" "$docs_tar"
   fi
 
   info "Starting all services (migrations run first)"
-  dc up -d --remove-orphans
+  dc up -d --no-build --remove-orphans
   wait_healthy
   seed_and_cron
 
